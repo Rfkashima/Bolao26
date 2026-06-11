@@ -134,6 +134,7 @@ function bindMainTabs() {
       state.view = button.dataset.view;
       localStorage.setItem("bolao-view", state.view);
       render();
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     });
   });
 }

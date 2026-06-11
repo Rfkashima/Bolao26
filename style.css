@@ -18,6 +18,7 @@
 
 body {
   margin: 0;
+  overflow-x: hidden;
   min-height: 100vh;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--text);
@@ -36,10 +37,14 @@ input {
 .topbar {
   position: sticky;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 10;
-  padding: 7px 8px 6px;
-  background: linear-gradient(180deg, rgba(238,244,251,.96), rgba(238,244,251,.78));
+  width: 100%;
+  padding: 0;
+  background: linear-gradient(180deg, rgba(238,244,251,.98), rgba(238,244,251,.94));
   backdrop-filter: blur(10px);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .08);
 }
 
 .hero {
@@ -47,11 +52,12 @@ input {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 9px 10px;
-  border: 1px solid rgba(255,255,255,.72);
-  border-radius: 16px;
-  background: rgba(255,255,255,.70);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, .08);
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(255,255,255,.76);
+  box-shadow: none;
 }
 
 .eyebrow {
@@ -124,7 +130,7 @@ h1 {
   align-items: center;
   justify-content: flex-end;
   gap: 7px;
-  max-width: 205px;
+  max-width: 230px;
   border: 1px solid rgba(21,94,239,.18);
   border-radius: 999px;
   padding: 5px 9px 5px 7px;
@@ -134,8 +140,8 @@ h1 {
 }
 
 .header-sponsor img {
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
   flex: 0 0 auto;
 }
@@ -161,7 +167,7 @@ h1 {
 .header-sponsor strong {
   display: block;
   color: #155eef;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 1000;
   white-space: nowrap;
 }
@@ -847,14 +853,14 @@ tr:last-child td {
 
 @media (max-width: 520px) {
   .topbar {
-    padding: 5px 6px 5px;
+    padding: 0;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
 
   .hero {
-    padding: 7px 8px;
-    border-radius: 14px;
+    padding: 7px 10px;
+    border-radius: 0;
     gap: 7px;
   }
 
@@ -882,14 +888,14 @@ tr:last-child td {
   }
 
   .header-sponsor {
-    max-width: 172px;
-    padding: 5px 8px 5px 7px;
-    gap: 6px;
+    max-width: 200px;
+    padding: 5px 9px 5px 7px;
+    gap: 7px;
   }
 
   .header-sponsor img {
-    width: 22px;
-    height: 22px;
+    width: 34px;
+    height: 34px;
   }
 
   .header-sponsor small {
@@ -897,25 +903,28 @@ tr:last-child td {
   }
 
   .header-sponsor strong {
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .topbar .main-tabs {
     position: fixed;
-    left: 8px;
-    right: 8px;
+    left: 0;
+    right: 0;
     top: auto;
-    bottom: max(8px, env(safe-area-inset-bottom));
+    bottom: 0;
     z-index: 999;
+    width: 100%;
     margin: 0;
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
-    padding: 7px;
-    border: 1px solid rgba(203,213,225,.88);
-    border-radius: 22px;
-    background: rgba(255,255,255,.93);
-    box-shadow: 0 14px 36px rgba(15, 23, 42, .22);
+    padding: 7px 8px max(7px, env(safe-area-inset-bottom));
+    border: 0;
+    border-top: 1px solid rgba(203,213,225,.92);
+    border-radius: 0;
+    background: rgba(255,255,255,.96);
+    box-shadow: 0 -12px 34px rgba(15, 23, 42, .18);
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
 
   .main-tabs button {
@@ -966,30 +975,30 @@ tr:last-child td {
 
 @media (min-width: 720px) {
   .header-sponsor {
-    max-width: 260px;
-    padding: 7px 12px 7px 9px;
+    max-width: 300px;
+    padding: 8px 14px 8px 10px;
   }
 
   .header-sponsor img {
-    width: 32px;
-    height: 32px;
+    width: 46px;
+    height: 46px;
   }
 
   .header-sponsor small {
-    font-size: 9px;
+    font-size: 10px;
   }
 
   .header-sponsor strong {
-    font-size: 14px;
+    font-size: 15px;
   }
 
   .topbar {
-    padding: 18px clamp(18px, 4vw, 42px) 12px;
+    padding: 0;
   }
 
   .hero {
-    padding: 22px 26px;
-    border-radius: 26px;
+    padding: 14px clamp(18px, 4vw, 42px);
+    border-radius: 0;
   }
 
   .hero-status {
