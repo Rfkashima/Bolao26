@@ -12,7 +12,9 @@ function doGet(e) {
     if (action === 'state') {
       return jsonp_(e, {
         ok: true,
-        picks: readPicks_()
+        picks: readPicks_(),
+        matches: readMatches_(),
+        stats: readStats_()
       });
     }
 
@@ -129,7 +131,7 @@ function savePicks_(payload) {
       g1,
       g2,
       round,
-      submittedAt: createdAt instanceof Date ? createdAt.toISOString() : String(createdAt || ''),
+      submittedAt: toIso_(createdAt),
       updatedAt: now.toISOString()
     });
   });
@@ -161,6 +163,85 @@ function readPicks_() {
       updatedAt: toIso_(values[i][6] || values[i][5])
     });
   }
+
+  return rows;
+}
+
+function readMatches_() {
+  const sheet = getSheet_(SHEETS.JOGOS);
+  const values = sheet.getDataRange().getValues();
+
+  if (values.length < 2) {
+    return [];
+  }
+
+  const headers = values[0].map((item) => String(item || '').trim().toLowerCase());
+  const idCol = findHeader_(headers, ['id_jogo', 'matchid', 'id']);
+  const score1Col = findHeader_(headers, ['gols_mandante', 'score1', 'g1']);
+  const score2Col = findHeader_(headers, ['gols_visitante', 'score2', 'g2']);
+  const statusCol = findHeader_(headers, ['status']);
+
+  const rows = [];
+
+  for (let i = 1; i < values.length; i++) {
+    if (!values[i][idCol]) {
+      continue;
+    }
+
+    rows.push({
+      id: String(values[i][idCol]),
+      score1: values[i][score1Col] === '' ? null : values[i][score1Col],
+      score2: values[i][score2Col] === '' ? null : values[i][score2Col],
+      status: statusCol === -1 ? '' : String(values[i][statusCol] || '')
+    });
+  }
+
+  return rows;
+}
+
+function readStats_() {
+  return {
+    scorers: readStatSheet_('ARTILHARIA'),
+    assists: readStatSheet_('ASSISTENCIAS'),
+    yellowCards: readStatSheet_('CARTOES_AMARELOS'),
+    redCards: readStatSheet_('CARTOES_VERMELHOS')
+  };
+}
+
+function readStatSheet_(sheetName) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(sheetName);
+
+  if (!sheet) {
+    return [];
+  }
+
+  const values = sheet.getDataRange().getValues();
+
+  if (values.length < 2) {
+    return [];
+  }
+
+  const headers = values[0].map((item) => String(item || '').trim().toLowerCase());
+  const playerCol = findHeader_(headers, ['jogador', 'player', 'nome']);
+  const teamCol = findHeader_(headers, ['time', 'team', 'pais', 'país']);
+  const totalCol = findHeader_(headers, ['total', 'qtd', 'quantidade', 'gols', 'assistencias', 'assistências', 'cartoes', 'cartões']);
+
+  const rows = [];
+
+  for (let i = 1; i < values.length; i++) {
+    if (!values[i][playerCol]) {
+      continue;
+    }
+
+    rows.push({
+      player: String(values[i][playerCol]),
+      team: teamCol === -1 ? '' : String(values[i][teamCol] || ''),
+      total: totalCol === -1 ? 0 : Number(values[i][totalCol] || 0)
+    });
+  }
+
+  rows.sort((a, b) => b.total - a.total || a.player.localeCompare(b.player));
 
   return rows;
 }

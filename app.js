@@ -4,6 +4,7 @@ const STORE_KEY = "bolao-copa-2026-picks-v1";
 const state = {
   view: localStorage.getItem("bolao-view") || "inicio",
   picks: {},
+  stats: {},
   selectedPlayer: localStorage.getItem("bolao-player") || "",
   playerCode: localStorage.getItem("bolao-player-code") || "",
   betRound: localStorage.getItem("bolao-bet-round") || "Rodada 1",
@@ -17,6 +18,17 @@ const app = $("#app");
 const rounds = [...new Set(DATA.matches.map((m) => m.round))];
 const groupStageRounds = ["Rodada 1", "Rodada 2", "Rodada 3"];
 
+const ROUND_LABELS = {
+  "Rodada 1": "Rodada 1",
+  "Rodada 2": "Rodada 2",
+  "Rodada 3": "Rodada 3",
+  "Rodada 4": "Mata-mata · 32 avos",
+  "Rodada 5": "Oitavas de final",
+  "Rodada 6": "Quartas de final",
+  "Rodada 7": "Semifinais",
+  "Rodada 8": "Final e 3º lugar"
+};
+
 const FLAGS = {
   "África do Sul": "🇿🇦",
   "Coreia do Sul": "🇰🇷",
@@ -27,7 +39,7 @@ const FLAGS = {
   "Catar": "🇶🇦",
   "Suíça": "🇨🇭",
   "Brasil": "🇧🇷",
-  "Escócia": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+  "Escócia": "🏴",
   "Haiti": "🇭🇹",
   "Marrocos": "🇲🇦",
   "Austrália": "🇦🇺",
@@ -64,12 +76,13 @@ const FLAGS = {
   "Uzbequistão": "🇺🇿",
   "Croácia": "🇭🇷",
   "Gana": "🇬🇭",
-  "Inglaterra": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+  "Inglaterra": "🏴",
   "Panamá": "🇵🇦"
 };
 
 function init() {
   $("#site-title").textContent = DATA.settings.title;
+  state.stats = DATA.stats || {};
   mergePicks(DATA.initialPicks || []);
   loadLocalPicks();
   bindMainTabs();
@@ -127,6 +140,19 @@ function flattenPicks() {
   return rows;
 }
 
+function mergeMatches(list) {
+  if (!Array.isArray(list)) return;
+
+  list.forEach((remote) => {
+    const match = DATA.matches.find((item) => item.id === remote.id || item.id === remote.matchId);
+    if (!match) return;
+
+    if (remote.score1 !== undefined) match.score1 = remote.score1 === null || remote.score1 === "" ? null : Number(remote.score1);
+    if (remote.score2 !== undefined) match.score2 = remote.score2 === null || remote.score2 === "" ? null : Number(remote.score2);
+    if (remote.status !== undefined) match.status = remote.status;
+  });
+}
+
 function loadBackendState() {
   if (!DATA.settings.apiUrl) {
     setBackendStatus("Modo local", "");
@@ -139,6 +165,8 @@ function loadBackendState() {
     .then((payload) => {
       if (!payload || payload.ok === false) throw new Error(payload?.error || "Falha ao carregar.");
       mergePicks(payload.picks || []);
+      mergeMatches(payload.matches || []);
+      state.stats = payload.stats || state.stats || {};
       state.loadedBackend = true;
       setBackendStatus("Online", "success");
       render();
@@ -216,10 +244,14 @@ function renderHome() {
 
   app.innerHTML = `
     <div class="stack">
+      ${renderLiveSection()}
+      ${renderTodayGamesSection()}
+      ${renderUpcomingGamesSection()}
+
       <section class="card">
         <div class="title-row">
           <h2>🏆 Ranking dos players</h2>
-          <span class="kicker">Desempate: exatos</span>
+          <span class="kicker">Exatos no ranking</span>
         </div>
         ${rankingTable(calculateRanking())}
       </section>
@@ -265,11 +297,73 @@ function renderHome() {
   `;
 }
 
+function renderLiveSection() {
+  const live = DATA.matches.filter((match) => isLiveMatch(match));
+
+  if (!live.length) {
+    return `
+      <section class="card">
+        <div class="title-row">
+          <h2>🔴 Ao vivo</h2>
+          <span class="kicker">Sem jogo ao vivo agora</span>
+        </div>
+        <div class="info-box">Nenhum jogo em andamento no momento.</div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="card">
+      <div class="title-row">
+        <h2>🔴 Ao vivo</h2>
+        <span class="live-pill">Em andamento</span>
+      </div>
+      <div class="games-list">
+        ${live.map(gameCard).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderTodayGamesSection() {
+  const todayKey = toDateKey(new Date());
+  const today = DATA.matches.filter((match) => match.date === todayKey);
+
+  return `
+    <section class="card">
+      <div class="title-row">
+        <h2>📍 Jogos de hoje</h2>
+        <span class="kicker">${formatDate(todayKey)}</span>
+      </div>
+      ${today.length ? `<div class="games-list">${today.map(gameCard).join("")}</div>` : `<div class="info-box">Nenhum jogo marcado para hoje.</div>`}
+    </section>
+  `;
+}
+
+function renderUpcomingGamesSection() {
+  const now = new Date();
+  const upcoming = DATA.matches
+    .filter((match) => makeDate(match) > now)
+    .sort((a, b) => makeDate(a) - makeDate(b))
+    .slice(0, 5);
+
+  return `
+    <section class="card">
+      <div class="title-row">
+        <h2>⏭️ Próximos jogos</h2>
+        <span class="kicker">Agenda</span>
+      </div>
+      ${upcoming.length ? `<div class="games-list">${upcoming.map(gameCard).join("")}</div>` : `<div class="info-box">Sem próximos jogos cadastrados.</div>`}
+    </section>
+  `;
+}
+
 function renderOfficial() {
   app.innerHTML = `
     <div class="stack">
       ${renderGroupsSection()}
-      ${renderGamesSection()}
+      ${renderKnockoutSection()}
+      ${renderStatsSection()}
     </div>
   `;
   bindEvents();
@@ -292,7 +386,7 @@ function renderGroupsSection() {
     <section>
       <div class="title-row">
         <h2>🌎 Grupos</h2>
-        <span class="kicker">Oficial</span>
+        <span class="kicker">Tabela + jogos</span>
       </div>
       <div class="group-grid">
         ${DATA.groups.map((group) => groupCard(group, standings[group.id] || [])).join("")}
@@ -302,60 +396,134 @@ function renderGroupsSection() {
 }
 
 function groupCard(group, rows) {
+  const matches = DATA.matches.filter((match) => match.group === group.name && groupStageRounds.includes(match.round));
+
   return `
     <div class="card group-card">
       <div class="group-head">
         <h3>${group.name}</h3>
       </div>
-      <div class="group-teams">
-        ${rows.map((row, index) => `
-          <div class="group-team">
-            <span>${index + 1}. ${country(row.team)}</span>
-            <span>${row.pts} pts</span>
-          </div>
-        `).join("")}
+
+      <div class="table-wrap group-table">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Time</th>
+              <th class="center">Pts</th>
+              <th class="center">V</th>
+              <th class="center">E</th>
+              <th class="center">D</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${country(row.team)}</td>
+                <td class="center strong">${row.pts}</td>
+                <td class="center">${row.v}</td>
+                <td class="center">${row.e}</td>
+                <td class="center">${row.d}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="group-games">
+        ${matches.map(groupGameCard).join("")}
       </div>
     </div>
   `;
 }
 
-function renderGamesSection() {
-  const round = rounds.includes(state.gamesRound) ? state.gamesRound : rounds[0];
-  const matches = DATA.matches.filter((m) => m.round === round);
+function groupGameCard(match) {
+  return `
+    <div class="game-card">
+      <div class="game-top">
+        <span>${displayRound(match.round)} · Jogo ${match.number}</span>
+        <span>${formatDate(match.date)} · ${match.time}</span>
+      </div>
+      ${matchLine(match)}
+    </div>
+  `;
+}
+
+function renderKnockoutSection() {
+  const matches = DATA.matches.filter((match) => !groupStageRounds.includes(match.round));
+
+  if (!matches.length) {
+    return "";
+  }
 
   return `
     <section class="card">
       <div class="title-row">
-        <h2>📅 Resultados oficiais</h2>
-        <span class="kicker">Jogos</span>
+        <h2>⚔️ Mata-mata</h2>
+        <span class="kicker">Jogos eliminatórios</span>
       </div>
-
-      <div class="toolbar">
-        <div class="field">
-          <label>Rodada</label>
-          <select id="gamesRoundSelect">
-            ${rounds.map((r) => `<option value="${r}" ${r === round ? "selected" : ""}>${r}</option>`).join("")}
-          </select>
-        </div>
-      </div>
-
       <div class="games-list">
-        ${matches.map((m) => `
-          <div class="game-card">
-            <div class="game-top">
-              <span>${m.group} · Jogo ${m.number}</span>
-              <span>${formatDate(m.date)} · ${m.time}</span>
-            </div>
-            <div class="game-line">
-              <span>${country(m.team1)}</span>
-              <span>${matchResultInline(m)}</span>
-              <span>${country(m.team2)}</span>
-            </div>
-            <div class="muted" style="font-size:11px;margin-top:5px">${m.venue}</div>
-          </div>
-        `).join("")}
+        ${matches.map(gameCard).join("")}
       </div>
     </section>
+  `;
+}
+
+function renderStatsSection() {
+  return `
+    <section class="card">
+      <div class="title-row">
+        <h2>📊 Estatísticas</h2>
+        <span class="kicker">Oficial</span>
+      </div>
+
+      <div class="stat-grid">
+        ${statCard("⚽ Artilharia", state.stats.scorers || state.stats.artilharia || [])}
+        ${statCard("🅰️ Assistências", state.stats.assists || state.stats.assistencias || [])}
+        ${statCard("🟨 Amarelos", state.stats.yellowCards || state.stats.amarelos || [])}
+        ${statCard("🟥 Vermelhos", state.stats.redCards || state.stats.vermelhos || [])}
+      </div>
+    </section>
+  `;
+}
+
+function statCard(title, rows) {
+  const cleanRows = Array.isArray(rows) ? rows.filter(Boolean).slice(0, 8) : [];
+
+  return `
+    <div class="stat-card">
+      <h3>${title}</h3>
+      ${cleanRows.length ? cleanRows.map((row) => `
+        <div class="stat-row">
+          <span>${row.player || row.nome || "-"}</span>
+          <span>${row.team ? country(row.team) : ""} ${row.total ?? row.value ?? row.qtd ?? 0}</span>
+        </div>
+      `).join("") : `<div class="muted" style="font-size:13px">Aguardando dados oficiais.</div>`}
+    </div>
+  `;
+}
+
+function gameCard(match) {
+  return `
+    <div class="game-card">
+      <div class="game-top">
+        <span>${displayRound(match.round)} · Jogo ${match.number}</span>
+        <span>${formatDate(match.date)} · ${match.time}</span>
+      </div>
+      ${matchLine(match)}
+      <div class="muted" style="font-size:11px;margin-top:5px">${match.venue}</div>
+    </div>
+  `;
+}
+
+function matchLine(match) {
+  return `
+    <div class="match-line">
+      <div class="match-left">${country(match.team1)}</div>
+      <div class="match-score">${matchResultInline(match)}</div>
+      <div class="match-right">${country(match.team2)}</div>
+    </div>
   `;
 }
 
@@ -389,7 +557,7 @@ function renderBetSection() {
         <div class="field">
           <label>Rodada</label>
           <select id="betRoundSelect">
-            ${rounds.map((r) => `<option value="${r}" ${r === round ? "selected" : ""}>${r}</option>`).join("")}
+            ${rounds.map((r) => `<option value="${r}" ${r === round ? "selected" : ""}>${displayRound(r)}</option>`).join("")}
           </select>
         </div>
 
@@ -397,8 +565,8 @@ function renderBetSection() {
       </div>
 
       ${locked
-        ? `<div class="notice danger">🔒 ${round} fechada. Prazo: ${formatDateTime(roundDeadline(round))}.</div>`
-        : `<div class="notice">⏰ ${round} fecha em ${formatDateTime(roundDeadline(round))}. O último salvamento sobrescreve o anterior.</div>`
+        ? `<div class="notice danger">🔒 ${displayRound(round)} fechada. Prazo: ${formatDateTime(roundDeadline(round))}.</div>`
+        : `<div class="notice">⏰ ${displayRound(round)} fecha em ${formatDateTime(roundDeadline(round))}. O último salvamento sobrescreve o anterior.</div>`
       }
 
       <div class="bet-list">
@@ -438,14 +606,14 @@ function renderPicksSection() {
     <section class="card">
       <div class="title-row">
         <h2>👀 Palpites enviados</h2>
-        <span class="kicker">Por rodada</span>
+        <span class="kicker">Por fase/rodada</span>
       </div>
 
       <div class="toolbar">
         <div class="field">
-          <label>Rodada</label>
+          <label>Rodada/fase</label>
           <select id="picksRoundSelect">
-            ${rounds.map((r) => `<option value="${r}" ${r === round ? "selected" : ""}>${r}</option>`).join("")}
+            ${rounds.map((r) => `<option value="${r}" ${r === round ? "selected" : ""}>${displayRound(r)}</option>`).join("")}
           </select>
         </div>
       </div>
@@ -457,11 +625,7 @@ function renderPicksSection() {
               <span>${match.group} · Jogo ${match.number}</span>
               <span>${formatDate(match.date)} · ${match.time}</span>
             </div>
-            <div class="pick-match-line">
-              <span>${country(match.team1)}</span>
-              <span>x</span>
-              <span>${country(match.team2)}</span>
-            </div>
+            ${matchLine(match)}
             <div class="player-picks">
               ${DATA.players.map((player) => {
                 const pick = state.picks[player.id]?.[match.id];
@@ -485,8 +649,6 @@ function bindEvents() {
   const playerCodeInput = $("#playerCodeInput");
   const betRoundSelect = $("#betRoundSelect");
   const picksRoundSelect = $("#picksRoundSelect");
-  const gamesRoundSelect = $("#gamesRoundSelect");
-  const saveButton = $("#savePicks");
 
   if (playerSelect) {
     playerSelect.addEventListener("change", (e) => {
@@ -519,14 +681,7 @@ function bindEvents() {
     });
   }
 
-  if (gamesRoundSelect) {
-    gamesRoundSelect.addEventListener("change", (e) => {
-      state.gamesRound = e.target.value;
-      localStorage.setItem("bolao-games-round", state.gamesRound);
-      render();
-    });
-  }
-
+  const saveButton = $("#savePicks");
   if (saveButton) {
     saveButton.addEventListener("click", () => saveRoundPicks(state.betRound));
   }
@@ -731,25 +886,32 @@ function isRoundLocked(round) {
   return new Date() >= roundDeadline(round);
 }
 
+function isLiveMatch(match) {
+  if (String(match.status || "").toLowerCase().includes("vivo")) {
+    return true;
+  }
+
+  const start = makeDate(match);
+  const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+  const now = new Date();
+
+  return now >= start && now <= end && match.score1 !== null && match.score2 !== null;
+}
+
 function makeDate(match) {
   return new Date(`${match.date}T${match.time}:00`);
+}
+
+function toDateKey(date) {
+  return date.toISOString().slice(0, 10);
 }
 
 function roundDeadlineCard(round) {
   const locked = isRoundLocked(round);
   return `
     <div class="deadline-box ${locked ? "danger" : ""}">
-      <strong>${locked ? "🔒" : "⏰"} ${round}</strong><br>
+      <strong>${locked ? "🔒" : "⏰"} ${displayRound(round)}</strong><br>
       ${locked ? "Fechada em" : "Fecha em"} ${formatDateTime(roundDeadline(round))}
-    </div>
-  `;
-}
-
-function kpi(label, value) {
-  return `
-    <div class="card">
-      <div class="kpi-label">${label}</div>
-      <div class="kpi-value">${value}</div>
     </div>
   `;
 }
@@ -759,6 +921,10 @@ function country(name) {
   return `<span class="country"><span class="flag">${flag}</span><span>${name}</span></span>`;
 }
 
+function displayRound(round) {
+  return ROUND_LABELS[round] || round;
+}
+
 function formatPick(pick) {
   if (!pick || Number.isNaN(pick.g1) || Number.isNaN(pick.g2)) return "-";
   return `${pick.g1} x ${pick.g2}`;
@@ -766,11 +932,6 @@ function formatPick(pick) {
 
 function matchResultInline(match) {
   if (match.score1 === null || match.score2 === null) return "x";
-  return `${match.score1} x ${match.score2}`;
-}
-
-function formatResult(match) {
-  if (match.score1 === null || match.score2 === null) return "-";
   return `${match.score1} x ${match.score2}`;
 }
 
