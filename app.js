@@ -245,7 +245,6 @@ function renderHome() {
   app.innerHTML = `
     <div class="stack">
       ${renderLiveSection()}
-      ${renderTodayGamesSection()}
       ${renderUpcomingGamesSection()}
 
       <section class="card">
@@ -325,36 +324,38 @@ function renderLiveSection() {
   `;
 }
 
-function renderTodayGamesSection() {
-  const todayKey = toDateKey(new Date());
-  const today = DATA.matches.filter((match) => match.date === todayKey);
-
-  return `
-    <section class="card">
-      <div class="title-row">
-        <h2>📍 Jogos de hoje</h2>
-        <span class="kicker">${formatDate(todayKey)}</span>
-      </div>
-      ${today.length ? `<div class="games-list">${today.map(gameCard).join("")}</div>` : `<div class="info-box">Nenhum jogo marcado para hoje.</div>`}
-    </section>
-  `;
-}
 
 function renderUpcomingGamesSection() {
   const now = new Date();
   const upcoming = DATA.matches
     .filter((match) => makeDate(match) > now)
     .sort((a, b) => makeDate(a) - makeDate(b))
-    .slice(0, 5);
+    .slice(0, 3);
 
   return `
     <section class="card">
       <div class="title-row">
         <h2>⏭️ Próximos jogos</h2>
-        <span class="kicker">Agenda</span>
+        <span class="kicker">3 próximos</span>
       </div>
-      ${upcoming.length ? `<div class="games-list">${upcoming.map(gameCard).join("")}</div>` : `<div class="info-box">Sem próximos jogos cadastrados.</div>`}
+      ${upcoming.length ? `<div class="compact-games">${upcoming.map(compactGameCard).join("")}</div>` : `<div class="info-box">Sem próximos jogos cadastrados.</div>`}
     </section>
+  `;
+}
+
+function compactGameCard(match) {
+  return `
+    <div class="compact-game">
+      <div class="compact-game-main">
+        <span>${compactCountry(match.team1)}</span>
+        <strong>${matchResultInline(match)}</strong>
+        <span>${compactCountry(match.team2)}</span>
+      </div>
+      <div class="compact-game-meta">
+        <span>${formatDate(match.date)} · ${match.time}</span>
+        <span>${compactVenue(match.venue)}</span>
+      </div>
+    </div>
   `;
 }
 
@@ -489,7 +490,7 @@ function renderStatsSection() {
 }
 
 function statCard(title, rows) {
-  const cleanRows = Array.isArray(rows) ? rows.filter(Boolean).slice(0, 8) : [];
+  const cleanRows = Array.isArray(rows) ? rows.filter(Boolean).slice(0, 10) : [];
 
   return `
     <div class="stat-card">
@@ -919,6 +920,73 @@ function roundDeadlineCard(round) {
 function country(name) {
   const flag = FLAGS[name] || "🏳️";
   return `<span class="country"><span class="flag">${flag}</span><span>${name}</span></span>`;
+}
+
+function compactCountry(name) {
+  const flag = FLAGS[name] || "🏳️";
+  return `<span class="compact-country"><span>${flag}</span><span>${countryCode(name)}</span></span>`;
+}
+
+function countryCode(name) {
+  const codes = {
+    "África do Sul": "RSA",
+    "Coreia do Sul": "KOR",
+    "México": "MEX",
+    "República Tcheca": "CZE",
+    "Bósnia": "BIH",
+    "Canadá": "CAN",
+    "Catar": "QAT",
+    "Suíça": "SUI",
+    "Brasil": "BRA",
+    "Escócia": "SCO",
+    "Haiti": "HAI",
+    "Marrocos": "MAR",
+    "Austrália": "AUS",
+    "Estados Unidos": "USA",
+    "Paraguai": "PAR",
+    "Turquia": "TUR",
+    "Alemanha": "GER",
+    "Costa do Marfim": "CIV",
+    "Curaçao": "CUW",
+    "Equador": "ECU",
+    "Holanda": "NED",
+    "Japão": "JPN",
+    "Suécia": "SWE",
+    "Tunísia": "TUN",
+    "Bélgica": "BEL",
+    "Egito": "EGY",
+    "Irã": "IRN",
+    "Nova Zelândia": "NZL",
+    "Arábia Saudita": "KSA",
+    "Cabo Verde": "CPV",
+    "Espanha": "ESP",
+    "Uruguai": "URU",
+    "França": "FRA",
+    "Iraque": "IRQ",
+    "Noruega": "NOR",
+    "Senegal": "SEN",
+    "Argélia": "ALG",
+    "Argentina": "ARG",
+    "Áustria": "AUT",
+    "Jordânia": "JOR",
+    "Colômbia": "COL",
+    "RD Congo": "COD",
+    "Portugal": "POR",
+    "Uzbequistão": "UZB",
+    "Croácia": "CRO",
+    "Gana": "GHA",
+    "Inglaterra": "ENG",
+    "Panamá": "PAN"
+  };
+
+  return codes[name] || String(name || "").slice(0, 3).toUpperCase();
+}
+
+function compactVenue(venue) {
+  const text = String(venue || "");
+  const parts = text.split(" - ");
+  if (parts.length >= 2) return parts[1];
+  return text.replace("Estadio ", "").replace("Stadium", "").trim();
 }
 
 function displayRound(round) {
