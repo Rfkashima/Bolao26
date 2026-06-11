@@ -1053,15 +1053,21 @@ function isRoundLocked(round) {
 }
 
 function isLiveMatch(match) {
-  if (String(match.status || "").toLowerCase().includes("vivo")) {
+  const status = String(match.status || "").toLowerCase();
+
+  if (status.includes("vivo") || status.includes("live") || status.includes("andamento")) {
     return true;
   }
 
+  if (status.includes("final")) {
+    return false;
+  }
+
   const start = makeDate(match);
-  const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+  const end = new Date(start.getTime() + 2.5 * 60 * 60 * 1000);
   const now = new Date();
 
-  return now >= start && now <= end && match.score1 !== null && match.score2 !== null;
+  return now >= start && now <= end;
 }
 
 function makeDate(match) {
@@ -1202,7 +1208,10 @@ function formatPick(pick) {
 }
 
 function matchResultInline(match) {
-  if (match.score1 === null || match.score2 === null) return "x";
+  if (match.score1 === null || match.score2 === null) {
+    return isLiveMatch(match) ? "AO VIVO" : "x";
+  }
+
   return `${match.score1} x ${match.score2}`;
 }
 
