@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bolão Copa 2026</title>
+  <meta name="description" content="Página pública do Bolão da Copa do Mundo 2026." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Copa do Mundo 2026</p>
+      <h1 id="site-title">Bolão Copa 2026</h1>
+      <p class="subtitle">Palpites por rodada, ranking dos jogadores, jogos, regras e premiação.</p>
+    </div>
+    <div class="top-actions">
+      <span class="status-pill" id="backend-status">Modo local</span>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Navegação principal">
+    <button data-page="inicio" class="active">Início</button>
+    <button data-page="palpitar">Palpitar</button>
+    <button data-page="ranking">Ranking</button>
+    <button data-page="palpites">Palpites</button>
+    <button data-page="jogos">Jogos</button>
+    <button data-page="grupos">Grupos</button>
+    <button data-page="regras">Regras</button>
+    <button data-page="premiacao">Premiação</button>
+  </nav>
+
+  <main id="app" class="container"></main>
+
+  <footer class="footer">
+    <span>Bolão Copa 2026</span>
+    <span>Placar exato: 3 pontos · Resultado correto: 1 ponto</span>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
