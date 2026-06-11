@@ -536,6 +536,17 @@ tr:last-child td {
   white-space: nowrap;
 }
 
+
+.player-pick-date {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
 .player-pick-score {
   display: block;
   margin-top: 2px;

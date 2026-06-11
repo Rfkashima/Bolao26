@@ -214,7 +214,11 @@ function loadBackendState() {
   jsonp(`${DATA.settings.apiUrl}?action=state`)
     .then((payload) => {
       if (!payload || payload.ok === false) throw new Error(payload?.error || "Falha ao carregar.");
-      mergePicks(payload.picks || []);
+      if (Array.isArray(payload.picks)) {
+        state.picks = {};
+        mergePicks(payload.picks);
+        saveLocalPicks();
+      }
       mergeMatches(payload.matches || []);
       state.stats = payload.stats || state.stats || {};
       state.videos = payload.videos || state.videos || [];
@@ -752,6 +756,7 @@ function renderPicksSection() {
                   <div class="player-pick">
                     <span class="player-pick-name">${player.name}</span>
                     <span class="player-pick-score">${shouldHide ? "Oculto" : formatPick(pick)}</span>
+                    <span class="player-pick-date">${formatPickLastSaved(pick)}</span>
                   </div>
                 `;
               }).join("")}
@@ -1124,6 +1129,28 @@ function compactVenue(venue) {
 
 function displayRound(round) {
   return ROUND_LABELS[round] || round;
+}
+
+
+function formatPickLastSaved(pick) {
+  const value = pick?.updatedAt || pick?.submittedAt;
+
+  if (!value) {
+    return "Não enviado";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Salvo";
+  }
+
+  return `Salvo ${date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  })}`;
 }
 
 function formatPick(pick) {
