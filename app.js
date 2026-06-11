@@ -93,8 +93,14 @@ const FLAGS = {
   "Panamá": "🇵🇦"
 };
 
+const FLAG_SVG_CODES = {
+  "Escócia": "1f3f4-e0067-e0062-e0073-e0063-e0074-e007f",
+  "Inglaterra": "1f3f4-e0067-e0062-e0065-e006e-e0067-e007f"
+};
+
 function init() {
   $("#site-title").textContent = DATA.settings.title;
+  injectHeaderSponsor();
   state.stats = DATA.stats || {};
   mergePicks(DATA.initialPicks || []);
   loadLocalPicks();
@@ -102,6 +108,24 @@ function init() {
   bindMainTabs();
   loadBackendState();
   render();
+}
+
+
+function injectHeaderSponsor() {
+  const target = document.querySelector(".hero-status");
+
+  if (!target || target.querySelector(".header-sponsor")) {
+    return;
+  }
+
+  const sponsor = document.createElement("div");
+  sponsor.className = "header-sponsor";
+  sponsor.innerHTML = `
+    <img src="logo-ia-pro-contato.png" alt="IA Pro Contato">
+    <span>IA Pro Contato</span>
+  `;
+
+  target.appendChild(sponsor);
 }
 
 function bindMainTabs() {
@@ -1055,14 +1079,29 @@ function roundDeadlineCard(round) {
 }
 
 function country(name) {
-  const flag = FLAGS[name] || "🏳️";
   const label = SHORT_COUNTRY_NAMES[name] || name;
-  return `<span class="country"><span class="flag">${flag}</span><span>${label}</span></span>`;
+  return `<span class="country">${flagMarkup(name)}<span>${label}</span></span>`;
 }
 
 function compactCountry(name) {
+  return `<span class="compact-country">${flagMarkup(name)}<span>${countryCode(name)}</span></span>`;
+}
+
+function flagMarkup(name) {
   const flag = FLAGS[name] || "🏳️";
-  return `<span class="compact-country"><span>${flag}</span><span>${countryCode(name)}</span></span>`;
+  const code = FLAG_SVG_CODES[name] || emojiToTwemojiCode(flag);
+
+  if (!code) {
+    return `<span class="flag-fallback">${flag}</span>`;
+  }
+
+  return `<img class="flag-img" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${code}.svg" alt="${escapeHtml(flag)}" loading="lazy" decoding="async">`;
+}
+
+function emojiToTwemojiCode(value) {
+  return Array.from(String(value || ""))
+    .map((char) => char.codePointAt(0).toString(16))
+    .join("-");
 }
 
 function countryCode(name) {
