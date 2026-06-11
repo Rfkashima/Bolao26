@@ -122,7 +122,7 @@ function injectHeaderSponsor() {
   sponsor.className = "header-sponsor";
   sponsor.innerHTML = `
     <img src="logo-ia-pro-contato.png" alt="IA Pro Contato">
-    <span>IA Pro Contato</span>
+    <span><small>Patrocinado por</small><strong>IA Pro Contato</strong></span>
   `;
 
   target.appendChild(sponsor);
