@@ -20,13 +20,13 @@ function init() {
   $("#site-title").textContent = DATA.settings.title;
   mergePicks(DATA.initialPicks || []);
   loadLocalPicks();
-  bindMainSwitch();
+  bindMainTabs();
   loadBackendState();
   render();
 }
 
-function bindMainSwitch() {
-  document.querySelectorAll(".main-switch button").forEach((button) => {
+function bindMainTabs() {
+  document.querySelectorAll(".main-tabs button").forEach((button) => {
     button.addEventListener("click", () => {
       state.view = button.dataset.view;
       localStorage.setItem("bolao-view", state.view);
@@ -35,8 +35,8 @@ function bindMainSwitch() {
   });
 }
 
-function setActiveSwitch() {
-  document.querySelectorAll(".main-switch button").forEach((button) => {
+function setActiveTab() {
+  document.querySelectorAll(".main-tabs button").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === state.view);
   });
 }
@@ -55,11 +55,7 @@ function saveLocalPicks() {
 function mergePicks(list) {
   list.forEach((pick) => {
     if (!pick || !pick.playerId || !pick.matchId) return;
-
-    if (!state.picks[pick.playerId]) {
-      state.picks[pick.playerId] = {};
-    }
-
+    if (!state.picks[pick.playerId]) state.picks[pick.playerId] = {};
     state.picks[pick.playerId][pick.matchId] = {
       g1: Number(pick.g1 ?? pick.goals1),
       g2: Number(pick.g2 ?? pick.goals2),
@@ -70,19 +66,11 @@ function mergePicks(list) {
 
 function flattenPicks() {
   const rows = [];
-
   Object.entries(state.picks).forEach(([playerId, picks]) => {
     Object.entries(picks).forEach(([matchId, pick]) => {
-      rows.push({
-        playerId,
-        matchId,
-        g1: pick.g1,
-        g2: pick.g2,
-        submittedAt: pick.submittedAt
-      });
+      rows.push({ playerId, matchId, g1: pick.g1, g2: pick.g2, submittedAt: pick.submittedAt });
     });
   });
-
   return rows;
 }
 
@@ -96,25 +84,18 @@ function loadBackendState() {
 
   jsonp(`${DATA.settings.apiUrl}?action=state`)
     .then((payload) => {
-      if (!payload || payload.ok === false) {
-        throw new Error(payload?.error || "Falha ao carregar.");
-      }
-
+      if (!payload || payload.ok === false) throw new Error(payload?.error || "Falha ao carregar.");
       mergePicks(payload.picks || []);
       state.loadedBackend = true;
       setBackendStatus("Online", "success");
       render();
     })
-    .catch(() => {
-      setBackendStatus("Falha no backend", "danger");
-    });
+    .catch(() => setBackendStatus("Falha no backend", "danger"));
 }
 
 function setBackendStatus(text, type) {
   const el = $("#backend-status");
-
   if (!el) return;
-
   el.textContent = DATA.settings.apiUrl ? text : "Modo local";
   el.className = `status-pill ${type || ""}`;
 }
@@ -144,7 +125,6 @@ function jsonp(url) {
 
 function submitBackend(payload) {
   if (!DATA.settings.apiUrl) return Promise.resolve();
-
   return fetch(DATA.settings.apiUrl, {
     method: "POST",
     mode: "no-cors",
@@ -153,70 +133,60 @@ function submitBackend(payload) {
 }
 
 function render() {
-  setActiveSwitch();
+  setActiveTab();
 
-  const pages = {
-    inicio: renderHomePage,
-    oficial: renderOfficialPage,
-    palpites: renderPicksAreaPage
-  };
+  if (state.view === "oficial") {
+    renderOfficial();
+    return;
+  }
 
-  pages[state.view]();
+  if (state.view === "palpites") {
+    renderPicksArea();
+    return;
+  }
+
+  renderHome();
 }
 
-function renderHomePage() {
+function renderHome() {
   const paid = DATA.players.filter((p) => p.paid).length;
-  const ranking = calculateRanking();
   const potential = DATA.players.length * DATA.settings.entryFee;
 
   app.innerHTML = `
-    <div class="page-stack">
+    <div class="stack">
       <section class="grid cards">
-        ${kpi("Jogadores", DATA.players.length)}
+        ${kpi("Players", DATA.players.length)}
         ${kpi("Jogos", DATA.matches.length)}
-        ${kpi("Valor", money(DATA.settings.entryFee))}
+        ${kpi("Entrada", money(DATA.settings.entryFee))}
         ${kpi("Pagos", `${paid}/${DATA.players.length}`)}
       </section>
 
-      <section class="grid two">
-        <div class="card">
-          <div class="section-title-row">
-            <h2>Ranking dos players</h2>
-            <span class="section-kicker">Desempate: placares exatos</span>
-          </div>
-          ${rankingTable(ranking)}
+      <section class="card">
+        <div class="title-row">
+          <h2>Ranking dos players</h2>
+          <span class="kicker">Desempate: placares exatos</span>
         </div>
-
-        <div class="card">
-          <div class="section-title-row">
-            <h2>Fechamento das rodadas</h2>
-            <span class="section-kicker">2h antes do primeiro jogo</span>
-          </div>
-          <div class="deadline-list">
-            ${rounds.slice(0, 4).map(roundDeadlineCard).join("")}
-          </div>
-        </div>
+        ${rankingTable(calculateRanking())}
       </section>
 
       <section class="grid two">
         <div class="card">
-          <div class="section-title-row">
+          <div class="title-row">
             <h2>Regras</h2>
-            <span class="section-kicker">Pontuação</span>
+            <span class="kicker">Pontuação</span>
           </div>
           <ul class="list">
-            <li>Placar exato vale <strong>${DATA.settings.exactScorePoints} pontos</strong>.</li>
-            <li>Resultado correto, sem acertar o placar, vale <strong>${DATA.settings.resultPoints} ponto</strong>.</li>
-            <li>Exemplo: resultado oficial Brasil 2 x 1 Marrocos. Palpite 2 x 1 soma 3 pontos. Palpite 1 x 0 soma 1 ponto.</li>
-            <li>Os palpites fecham <strong>${DATA.settings.lockHoursBeforeRound}h antes do primeiro jogo da rodada</strong>.</li>
-            <li>Critério de desempate: maior número de placares exatos.</li>
+            <li>Placar exato: <strong>${DATA.settings.exactScorePoints} pontos</strong>.</li>
+            <li>Resultado correto: <strong>${DATA.settings.resultPoints} ponto</strong>.</li>
+            <li>Palpites fecham <strong>${DATA.settings.lockHoursBeforeRound}h antes</strong> do primeiro jogo da rodada.</li>
+            <li>Desempate: maior número de placares exatos.</li>
           </ul>
         </div>
 
         <div class="card">
-          <div class="section-title-row">
+          <div class="title-row">
             <h2>Premiação</h2>
-            <span class="section-kicker">Total: ${money(potential)}</span>
+            <span class="kicker">Total: ${money(potential)}</span>
           </div>
           <ul class="list">
             <li>1º lugar: <strong>R$ 100,00</strong>.</li>
@@ -226,28 +196,113 @@ function renderHomePage() {
           </ul>
         </div>
       </section>
+
+      <section class="card">
+        <div class="title-row">
+          <h2>Fechamento</h2>
+          <span class="kicker">Por rodada</span>
+        </div>
+        <div class="deadline-list">
+          ${rounds.slice(0, 4).map(roundDeadlineCard).join("")}
+        </div>
+      </section>
     </div>
   `;
 }
 
-function renderOfficialPage() {
+function renderOfficial() {
   app.innerHTML = `
-    <div class="page-stack">
-      ${renderGamesSection()}
+    <div class="stack">
       ${renderGroupsSection()}
+      ${renderGamesSection()}
     </div>
   `;
   bindEvents();
 }
 
-function renderPicksAreaPage() {
+function renderPicksArea() {
   app.innerHTML = `
-    <div class="page-stack">
+    <div class="stack">
       ${renderBetSection()}
       ${renderPicksSection()}
     </div>
   `;
   bindEvents();
+}
+
+function renderGroupsSection() {
+  const standings = calculateGroupStandings();
+
+  return `
+    <section>
+      <div class="title-row">
+        <h2>Grupos</h2>
+        <span class="kicker">Oficial</span>
+      </div>
+      <div class="group-grid">
+        ${DATA.groups.map((group) => groupCard(group, standings[group.id] || [])).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function groupCard(group, rows) {
+  return `
+    <div class="card group-card">
+      <div class="group-head">
+        <h3>${group.name}</h3>
+        <span class="pill">${group.teams.length} times</span>
+      </div>
+      <div class="group-teams">
+        ${rows.map((row, index) => `
+          <div class="group-team">
+            <span>${index + 1}. ${row.team}</span>
+            <span>${row.pts} pts</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderGamesSection() {
+  const round = rounds.includes(state.gamesRound) ? state.gamesRound : rounds[0];
+  const matches = DATA.matches.filter((m) => m.round === round);
+
+  return `
+    <section class="card">
+      <div class="title-row">
+        <h2>Resultados oficiais</h2>
+        <span class="kicker">Jogos</span>
+      </div>
+
+      <div class="toolbar">
+        <div class="field">
+          <label>Rodada</label>
+          <select id="gamesRoundSelect">
+            ${rounds.map((r) => `<option value="${r}" ${r === round ? "selected" : ""}>${r}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+
+      <div class="games-list">
+        ${matches.map((m) => `
+          <div class="game-card">
+            <div class="game-top">
+              <span>${m.group} · Jogo ${m.number}</span>
+              <span>${formatDate(m.date)} · ${m.time}</span>
+            </div>
+            <div class="game-line">
+              <span>${m.team1}</span>
+              <span>${matchResultInline(m)}</span>
+              <span>${m.team2}</span>
+            </div>
+            <div class="muted" style="font-size:11px;margin-top:5px">${m.venue}</div>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
 }
 
 function renderBetSection() {
@@ -257,10 +312,10 @@ function renderBetSection() {
   const matches = DATA.matches.filter((m) => m.round === round);
 
   return `
-    <section class="card" id="section-palpitar">
-      <div class="section-title-row">
+    <section class="card">
+      <div class="title-row">
         <h2>Enviar palpites</h2>
-        <span class="section-kicker">Formato: Brasil __ X __ Chile</span>
+        <span class="kicker">Brasil __ X __ Chile</span>
       </div>
 
       <div class="toolbar">
@@ -279,11 +334,11 @@ function renderBetSection() {
           </select>
         </div>
 
-        <button class="btn" id="savePicks" ${locked ? "disabled" : ""}>Salvar palpites</button>
+        <button class="btn" id="savePicks" ${locked ? "disabled" : ""}>Salvar</button>
       </div>
 
       ${locked
-        ? `<div class="notice danger">${round} fechada. O prazo era ${formatDateTime(roundDeadline(round))}.</div>`
+        ? `<div class="notice danger">${round} fechada. Prazo: ${formatDateTime(roundDeadline(round))}.</div>`
         : `<div class="notice">${round} fecha em ${formatDateTime(roundDeadline(round))}.</div>`
       }
 
@@ -299,17 +354,17 @@ function betRow(match, playerId, locked) {
 
   return `
     <div class="bet-row">
-      <div class="bet-row-top">
-        <div class="meta">${match.group} · Jogo ${match.number} · ${formatDate(match.date)} às ${match.time}</div>
-        <div class="meta">${match.venue}</div>
+      <div class="bet-meta">
+        <span>${match.group} · Jogo ${match.number}</span>
+        <span>${formatDate(match.date)} · ${match.time}</span>
       </div>
 
       <div class="bet-line">
-        <span class="team-name">${match.team1}</span>
+        <span class="team">${match.team1}</span>
         <input type="number" min="0" max="99" data-match="${match.id}" data-side="g1" value="${pick.g1 ?? ""}" ${locked ? "disabled" : ""}>
-        <span class="bet-x">X</span>
+        <span class="x">X</span>
         <input type="number" min="0" max="99" data-match="${match.id}" data-side="g2" value="${pick.g2 ?? ""}" ${locked ? "disabled" : ""}>
-        <span class="team-name">${match.team2}</span>
+        <span class="team">${match.team2}</span>
       </div>
     </div>
   `;
@@ -321,10 +376,10 @@ function renderPicksSection() {
   const shouldHide = !DATA.settings.showPicksBeforeDeadline && !isRoundLocked(round);
 
   return `
-    <section class="card" id="section-palpites">
-      <div class="section-title-row">
+    <section class="card">
+      <div class="title-row">
         <h2>Palpites enviados</h2>
-        <span class="section-kicker">Por rodada</span>
+        <span class="kicker">Por rodada</span>
       </div>
 
       <div class="toolbar">
@@ -335,8 +390,6 @@ function renderPicksSection() {
           </select>
         </div>
       </div>
-
-      ${shouldHide ? `<div class="notice warning">Os palpites desta rodada ficam ocultos até o fechamento.</div>` : ""}
 
       <div class="table-wrap">
         <table>
@@ -357,106 +410,6 @@ function renderPicksSection() {
         </table>
       </div>
     </section>
-  `;
-}
-
-function renderGamesSection() {
-  const round = rounds.includes(state.gamesRound) ? state.gamesRound : rounds[0];
-  const matches = DATA.matches.filter((m) => m.round === round);
-
-  return `
-    <section class="card" id="section-jogos">
-      <div class="section-title-row">
-        <h2>Resultados oficiais</h2>
-        <span class="section-kicker">Jogos e placares oficiais</span>
-      </div>
-
-      <div class="toolbar">
-        <div class="field">
-          <label>Rodada</label>
-          <select id="gamesRoundSelect">
-            ${rounds.map((r) => `<option value="${r}" ${r === round ? "selected" : ""}>${r}</option>`).join("")}
-          </select>
-        </div>
-      </div>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Nº</th>
-              <th>Jogo</th>
-              <th>Data</th>
-              <th>Local</th>
-              <th class="center">Resultado</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${matches.map((m) => `
-              <tr>
-                <td>${m.number}</td>
-                <td>
-                  <span class="compact-match">${m.team1} ${matchResultInline(m)} ${m.team2}</span>
-                  <div class="muted">${m.group}</div>
-                </td>
-                <td>${formatDate(m.date)} às ${m.time}</td>
-                <td>${m.venue}</td>
-                <td class="center score-text">${formatResult(m)}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  `;
-}
-
-function renderGroupsSection() {
-  const standings = calculateGroupStandings();
-
-  return `
-    <section id="section-grupos">
-      <div class="section-title-row">
-        <h2>Grupos</h2>
-        <span class="section-kicker">Classificação oficial</span>
-      </div>
-
-      <div class="group-grid">
-        ${DATA.groups.map((g) => groupCard(g, standings[g.id] || [])).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function groupCard(group, rows) {
-  return `
-    <div class="card group-card">
-      <h3>${group.name}<span class="pill">${group.teams.length} times</span></h3>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Pos</th>
-              <th>País</th>
-              <th class="center">Pts</th>
-              <th class="center">J</th>
-              <th class="center">SG</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map((r, index) => `
-              <tr>
-                <td>${index + 1}</td>
-                <td>${r.team}</td>
-                <td class="center strong">${r.pts}</td>
-                <td class="center">${r.j}</td>
-                <td class="center">${r.sg}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </div>
-    </div>
   `;
 }
 
@@ -519,10 +472,8 @@ function saveRoundPicks(round) {
   const newPicks = [];
 
   for (const match of matches) {
-    const g1Input = document.querySelector(`input[data-match="${match.id}"][data-side="g1"]`);
-    const g2Input = document.querySelector(`input[data-match="${match.id}"][data-side="g2"]`);
-    const g1 = g1Input ? g1Input.value : "";
-    const g2 = g2Input ? g2Input.value : "";
+    const g1 = document.querySelector(`input[data-match="${match.id}"][data-side="g1"]`)?.value || "";
+    const g2 = document.querySelector(`input[data-match="${match.id}"][data-side="g2"]`)?.value || "";
 
     if (g1 === "" || g2 === "") {
       alert("Preencha todos os jogos da rodada antes de salvar.");
@@ -541,34 +492,30 @@ function saveRoundPicks(round) {
   mergePicks(newPicks);
   saveLocalPicks();
 
-  submitBackend({
-    action: "savePicks",
-    playerId: state.selectedPlayer,
-    round,
-    picks: newPicks
-  }).finally(() => {
-    alert("Palpites salvos.");
-    render();
-  });
+  submitBackend({ action: "savePicks", playerId: state.selectedPlayer, round, picks: newPicks })
+    .finally(() => {
+      alert("Palpites salvos.");
+      render();
+    });
 }
 
 function rankingTable(ranking) {
   return `
-    <div class="table-wrap">
+    <div class="table-wrap rank-table">
       <table>
         <thead>
           <tr>
-            <th>Posição</th>
-            <th>Jogador</th>
-            <th class="center">Pontos</th>
-            <th class="center">Placares exatos</th>
+            <th>#</th>
+            <th>Player</th>
+            <th class="center">Pts</th>
+            <th class="center">Exatos</th>
             <th class="center">Resultados</th>
           </tr>
         </thead>
         <tbody>
           ${ranking.map((row, index) => `
             <tr>
-              <td class="strong">${index + 1}º</td>
+              <td class="strong">${index + 1}</td>
               <td>${row.name}</td>
               <td class="center strong">${row.points}</td>
               <td class="center">${row.exacts}</td>
@@ -588,21 +535,13 @@ function calculateRanking() {
     let results = 0;
 
     DATA.matches.forEach((match) => {
-      const pick = state.picks[player.id]?.[match.id];
-      const scored = scorePick(pick, match);
-
+      const scored = scorePick(state.picks[player.id]?.[match.id], match);
       points += scored.points;
       exacts += scored.exact ? 1 : 0;
       results += scored.result ? 1 : 0;
     });
 
-    return {
-      id: player.id,
-      name: player.name,
-      points,
-      exacts,
-      results
-    };
+    return { id: player.id, name: player.name, points, exacts, results };
   }).sort((a, b) => b.points - a.points || b.exacts - a.exacts || a.name.localeCompare(b.name));
 }
 
@@ -650,12 +589,10 @@ function calculateGroupStandings() {
     .forEach((m) => {
       const groupId = String(m.group || "").replace("Grupo ", "");
       const table = standings[groupId];
-
       if (!table) return;
 
       const a = table.find((r) => r.team === m.team1);
       const b = table.find((r) => r.team === m.team2);
-
       if (!a || !b) return;
 
       a.j++;
@@ -697,7 +634,6 @@ function roundDeadline(round) {
 
   const date = makeDate(first);
   date.setHours(date.getHours() - DATA.settings.lockHoursBeforeRound);
-
   return date;
 }
 
@@ -711,7 +647,6 @@ function makeDate(match) {
 
 function roundDeadlineCard(round) {
   const locked = isRoundLocked(round);
-
   return `
     <div class="deadline-box ${locked ? "danger" : ""}">
       <strong>${round}</strong><br>
@@ -730,26 +665,17 @@ function kpi(label, value) {
 }
 
 function formatPick(pick) {
-  if (!pick || Number.isNaN(pick.g1) || Number.isNaN(pick.g2)) {
-    return "-";
-  }
-
+  if (!pick || Number.isNaN(pick.g1) || Number.isNaN(pick.g2)) return "-";
   return `${pick.g1} x ${pick.g2}`;
 }
 
 function matchResultInline(match) {
-  if (match.score1 === null || match.score2 === null) {
-    return "x";
-  }
-
+  if (match.score1 === null || match.score2 === null) return "x";
   return `${match.score1} x ${match.score2}`;
 }
 
 function formatResult(match) {
-  if (match.score1 === null || match.score2 === null) {
-    return "-";
-  }
-
+  if (match.score1 === null || match.score2 === null) return "-";
   return `${match.score1} x ${match.score2}`;
 }
 
@@ -759,17 +685,11 @@ function formatDate(value) {
 }
 
 function formatDateTime(date) {
-  return date.toLocaleString("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short"
-  });
+  return date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
 function money(value) {
-  return Number(value || 0).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL"
-  });
+  return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 init();
