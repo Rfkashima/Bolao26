@@ -5,10 +5,14 @@
   --text: #08111f;
   --muted: #5a6678;
   --line: rgba(190, 204, 222, .9);
-  --primary: #155eef;
+  --primary: #0057ff;
+  --primary-2: #0b2ea8;
+  --world-green: #009b3a;
+  --world-red: #d71920;
+  --world-blue: #0057ff;
   --dark: #08111f;
-  --green: #12805c;
-  --red: #b42318;
+  --green: #009b3a;
+  --red: #d71920;
   --amber: #b54708;
   --shadow: 0 12px 30px rgba(15, 23, 42, .10);
   --radius: 18px;
@@ -23,7 +27,9 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--text);
   background:
-    linear-gradient(180deg, rgba(238, 244, 251, .50), rgba(238, 244, 251, .84)),
+    radial-gradient(circle at 18% 8%, rgba(0,155,58,.22), transparent 30%),
+    radial-gradient(circle at 84% 10%, rgba(215,25,32,.18), transparent 26%),
+    linear-gradient(180deg, rgba(238, 244, 251, .48), rgba(238, 244, 251, .86)),
     url("background-fifa-2026.jpg") center top / cover fixed no-repeat,
     var(--bg);
 }
@@ -42,9 +48,12 @@ input {
   z-index: 10;
   width: 100%;
   padding: 0;
-  background: linear-gradient(180deg, rgba(238,244,251,.98), rgba(238,244,251,.94));
+  background:
+    linear-gradient(90deg, rgba(0,155,58,.16), rgba(255,255,255,.96) 28%, rgba(255,255,255,.96) 72%, rgba(215,25,32,.14)),
+    rgba(255,255,255,.96);
   backdrop-filter: blur(10px);
-  box-shadow: 0 8px 22px rgba(15, 23, 42, .08);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .10);
+  border-bottom: 1px solid rgba(203,213,225,.88);
 }
 
 .hero {
@@ -56,7 +65,7 @@ input {
   padding: 9px 12px;
   border: 0;
   border-radius: 0;
-  background: rgba(255,255,255,.76);
+  background: linear-gradient(90deg, rgba(255,255,255,.84), rgba(255,255,255,.70));
   box-shadow: none;
 }
 
@@ -71,9 +80,15 @@ input {
 
 h1 {
   margin: 0;
-  font-size: clamp(22px, 6.8vw, 44px);
-  line-height: .94;
-  letter-spacing: -0.06em;
+  font-size: clamp(24px, 7vw, 48px);
+  line-height: .92;
+  letter-spacing: -0.065em;
+  font-weight: 1000;
+  color: transparent;
+  background: linear-gradient(90deg, var(--world-green), var(--world-blue) 50%, var(--world-red));
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-shadow: 0 10px 26px rgba(15,23,42,.10);
 }
 
 .hero-status {
@@ -125,51 +140,66 @@ h1 {
 }
 
 
+.header-sponsor-row {
+  width: 100%;
+  padding: 0 12px 8px;
+}
+
 .header-sponsor {
-  display: inline-flex;
+  width: 100%;
+  display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 7px;
-  max-width: 230px;
-  border: 1px solid rgba(21,94,239,.18);
-  border-radius: 999px;
-  padding: 5px 9px 5px 7px;
-  background: rgba(255,255,255,.82);
+  justify-content: center;
+  gap: 9px;
+  border-top: 1px solid rgba(203,213,225,.66);
+  border-bottom: 1px solid rgba(203,213,225,.66);
+  padding: 6px 10px;
+  background:
+    linear-gradient(90deg, rgba(0,155,58,.12), rgba(255,255,255,.72), rgba(215,25,32,.12));
   color: #155eef;
-  box-shadow: 0 6px 14px rgba(15, 23, 42, .07);
 }
 
 .header-sponsor img {
-  width: 36px;
-  height: 36px;
+  width: 42px;
+  height: 42px;
   object-fit: contain;
   flex: 0 0 auto;
 }
 
 .header-sponsor span {
-  display: grid;
-  gap: 1px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
   line-height: 1.05;
-  text-align: left;
+  text-align: center;
+  flex-wrap: wrap;
 }
 
 .header-sponsor small {
   display: block;
   color: #5a6678;
-  font-size: 8px;
-  font-weight: 900;
+  font-size: 10px;
+  font-weight: 950;
   text-transform: uppercase;
-  letter-spacing: .04em;
+  letter-spacing: .05em;
 }
 
 .header-sponsor strong {
   display: block;
   color: #155eef;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 1000;
   white-space: nowrap;
+}
+
+.header-sponsor em {
+  display: block;
+  color: #08111f;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
 }
 
 .flag-img {
@@ -217,6 +247,71 @@ h1 {
   color: #fff;
 }
 
+
+/* Barra inferior fixa estilo app, válida também no PC */
+.main-tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
+  width: 100%;
+  margin: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px clamp(10px, 4vw, 220px) max(8px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(203,213,225,.92);
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 -12px 34px rgba(15, 23, 42, .18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.main-tabs button {
+  min-height: 52px;
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  border: 0;
+  border-radius: 16px;
+  padding: 7px 6px;
+  background: transparent;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.main-tabs button::before {
+  display: block;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.main-tabs button[data-view="inicio"]::before {
+  content: "🏠";
+}
+
+.main-tabs button[data-view="oficial"]::before {
+  content: "🏆";
+}
+
+.main-tabs button[data-view="palpites"]::before {
+  content: "📝";
+}
+
+.main-tabs button.active {
+  background: linear-gradient(135deg, var(--world-blue), var(--primary-2));
+  color: #fff;
+}
+
+.container {
+  margin-bottom: 94px;
+}
+
+.footer {
+  padding-bottom: 98px;
+}
+
+
 .container {
   width: min(100% - 18px, 1180px);
   margin: 10px auto 28px;
@@ -238,6 +333,7 @@ h1 {
 
 .card {
   border: 1px solid rgba(255,255,255,.72);
+  border-top: 3px solid rgba(0,87,255,.52);
   border-radius: var(--radius);
   background: var(--panel);
   box-shadow: var(--shadow);
@@ -845,12 +941,6 @@ tr:last-child td {
 }
 
 
-@media (min-width: 521px) {
-  .main-tabs {
-    position: static;
-  }
-}
-
 @media (max-width: 520px) {
   .topbar {
     padding: 0;
@@ -859,9 +949,35 @@ tr:last-child td {
   }
 
   .hero {
-    padding: 7px 10px;
+    padding: 8px 10px;
     border-radius: 0;
     gap: 7px;
+  }
+
+  .header-sponsor-row {
+    padding: 0 0 6px;
+  }
+
+  .header-sponsor {
+    gap: 7px;
+    padding: 5px 8px;
+  }
+
+  .header-sponsor img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .header-sponsor small {
+    font-size: 8px;
+  }
+
+  .header-sponsor strong {
+    font-size: 12px;
+  }
+
+  .header-sponsor em {
+    display: none;
   }
 
   .eyebrow {
@@ -869,7 +985,7 @@ tr:last-child td {
   }
 
   h1 {
-    font-size: 21px;
+    font-size: 24px;
     line-height: .9;
   }
 
@@ -887,80 +1003,20 @@ tr:last-child td {
     font-size: 9px;
   }
 
-  .header-sponsor {
-    max-width: 200px;
-    padding: 5px 9px 5px 7px;
-    gap: 7px;
-  }
-
-  .header-sponsor img {
-    width: 34px;
-    height: 34px;
-  }
-
-  .header-sponsor small {
-    font-size: 7px;
-  }
-
-  .header-sponsor strong {
-    font-size: 11px;
-  }
-
-  .topbar .main-tabs {
-    position: fixed;
-    left: 0;
-    right: 0;
-    top: auto;
-    bottom: 0;
-    z-index: 999;
-    width: 100%;
-    margin: 0;
-    grid-template-columns: repeat(3, 1fr);
+  .main-tabs {
     gap: 6px;
-    padding: 7px 8px max(7px, env(safe-area-inset-bottom));
-    border: 0;
-    border-top: 1px solid rgba(203,213,225,.92);
-    border-radius: 0;
-    background: rgba(255,255,255,.96);
-    box-shadow: 0 -12px 34px rgba(15, 23, 42, .18);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    padding-left: 8px;
+    padding-right: 8px;
   }
 
   .main-tabs button {
     min-height: 48px;
-    display: grid;
-    place-items: center;
-    gap: 2px;
-    border: 0;
-    border-radius: 16px;
     padding: 6px 4px;
-    background: transparent;
     font-size: 10px;
-    line-height: 1;
   }
 
   .main-tabs button::before {
-    display: block;
     font-size: 19px;
-    line-height: 1;
-  }
-
-  .main-tabs button[data-view="inicio"]::before {
-    content: "🏠";
-  }
-
-  .main-tabs button[data-view="oficial"]::before {
-    content: "🏆";
-  }
-
-  .main-tabs button[data-view="palpites"]::before {
-    content: "📝";
-  }
-
-  .main-tabs button.active {
-    background: var(--dark);
-    color: #fff;
   }
 
   .container {
@@ -974,14 +1030,13 @@ tr:last-child td {
 }
 
 @media (min-width: 720px) {
-  .header-sponsor {
-    max-width: 300px;
-    padding: 8px 14px 8px 10px;
+  .header-sponsor-row {
+    padding: 0 clamp(18px, 4vw, 42px) 10px;
   }
 
   .header-sponsor img {
-    width: 46px;
-    height: 46px;
+    width: 50px;
+    height: 50px;
   }
 
   .header-sponsor small {
@@ -989,7 +1044,11 @@ tr:last-child td {
   }
 
   .header-sponsor strong {
-    font-size: 15px;
+    font-size: 16px;
+  }
+
+  .header-sponsor em {
+    font-size: 12px;
   }
 
   .topbar {

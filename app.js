@@ -112,20 +112,23 @@ function init() {
 
 
 function injectHeaderSponsor() {
-  const target = document.querySelector(".hero-status");
+  const topbar = document.querySelector(".topbar");
+  const hero = document.querySelector(".hero");
 
-  if (!target || target.querySelector(".header-sponsor")) {
+  if (!topbar || !hero || topbar.querySelector(".header-sponsor-row")) {
     return;
   }
 
   const sponsor = document.createElement("div");
-  sponsor.className = "header-sponsor";
+  sponsor.className = "header-sponsor-row";
   sponsor.innerHTML = `
-    <img src="logo-ia-pro-contato.png" alt="IA Pro Contato">
-    <span><small>Patrocinado por</small><strong>IA Pro Contato</strong></span>
+    <div class="header-sponsor">
+      <img src="logo-ia-pro-contato.png" alt="IA Pro Contato">
+      <span><small>Patrocinado por</small><strong>IA Pro Contato</strong><em>Atendimento automatizado e ERP</em></span>
+    </div>
   `;
 
-  target.appendChild(sponsor);
+  hero.insertAdjacentElement("afterend", sponsor);
 }
 
 function bindMainTabs() {
