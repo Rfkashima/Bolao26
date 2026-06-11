@@ -1,9 +1,11 @@
 const DATA = window.BOLAO_DATA;
 const STORE_KEY = "bolao-copa-2026-picks-v1";
+const DRAFT_KEY = "bolao-copa-2026-drafts-v1";
 
 const state = {
   view: localStorage.getItem("bolao-view") || "inicio",
   picks: {},
+  drafts: {},
   stats: {},
   videos: [],
   selectedPlayer: localStorage.getItem("bolao-player") || "",
@@ -96,6 +98,7 @@ function init() {
   state.stats = DATA.stats || {};
   mergePicks(DATA.initialPicks || []);
   loadLocalPicks();
+  loadDrafts();
   bindMainTabs();
   loadBackendState();
   render();
@@ -126,6 +129,42 @@ function loadLocalPicks() {
 
 function saveLocalPicks() {
   localStorage.setItem(STORE_KEY, JSON.stringify(flattenPicks()));
+}
+
+function loadDrafts() {
+  try {
+    state.drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
+  } catch (_) {
+    state.drafts = {};
+  }
+}
+
+function saveDrafts() {
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(state.drafts || {}));
+}
+
+function getDraftPick(playerId, round, matchId) {
+  return state.drafts?.[playerId]?.[round]?.[matchId] || null;
+}
+
+function setDraftPick(playerId, round, matchId, g1, g2) {
+  if (!playerId || !round || !matchId) return;
+  if (!state.drafts[playerId]) state.drafts[playerId] = {};
+  if (!state.drafts[playerId][round]) state.drafts[playerId][round] = {};
+
+  state.drafts[playerId][round][matchId] = {
+    g1,
+    g2,
+    updatedAt: new Date().toISOString()
+  };
+
+  saveDrafts();
+}
+
+function clearDraftRound(playerId, round) {
+  if (!state.drafts?.[playerId]?.[round]) return;
+  delete state.drafts[playerId][round];
+  saveDrafts();
 }
 
 function mergePicks(list) {
@@ -220,7 +259,7 @@ function submitBackend(payload) {
   if (!DATA.settings.apiUrl) return Promise.resolve({ ok: true });
 
   const compact = {
-    action: payload.action,
+    action: "savePicks",
     playerId: payload.playerId,
     playerCode: payload.playerCode,
     round: payload.round,
@@ -231,7 +270,7 @@ function submitBackend(payload) {
     }))
   };
 
-  const url = `${DATA.settings.apiUrl}?action=savePicks&payload=${encodeURIComponent(JSON.stringify(compact))}`;
+  const url = `${DATA.settings.apiUrl}?payload=${encodeURIComponent(JSON.stringify(compact))}`;
   return jsonp(url);
 }
 
@@ -761,6 +800,16 @@ function bindEvents() {
     });
   }
 
+  document.querySelectorAll("input[data-match][data-side]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const matchId = input.dataset.match;
+      const g1 = document.querySelector(`input[data-match="${matchId}"][data-side="g1"]`)?.value || "";
+      const g2 = document.querySelector(`input[data-match="${matchId}"][data-side="g2"]`)?.value || "";
+
+      setDraftPick(state.selectedPlayer, state.betRound, matchId, g1, g2);
+    });
+  });
+
   const saveButton = $("#savePicks");
   if (saveButton) {
     saveButton.addEventListener("click", () => saveRoundPicks(state.betRound));
@@ -804,6 +853,10 @@ function saveRoundPicks(round) {
     });
   }
 
+  mergePicks(newPicks);
+  saveLocalPicks();
+  clearDraftRound(state.selectedPlayer, round);
+
   submitBackend({
     action: "savePicks",
     playerId: state.selectedPlayer,
@@ -812,7 +865,7 @@ function saveRoundPicks(round) {
     picks: newPicks
   }).then((response) => {
     if (!response || response.ok === false) {
-      throw new Error(response?.error || "Não foi possível salvar.");
+      throw new Error(response?.error || "Não foi possível salvar no Google Sheets.");
     }
 
     mergePicks(response.picks || newPicks);
@@ -820,7 +873,7 @@ function saveRoundPicks(round) {
     alert("Palpites salvos.");
     render();
   }).catch((error) => {
-    alert(error.message || "Erro ao salvar os palpites.");
+    alert(`Palpites guardados neste aparelho, mas não enviados ao Google Sheets: ${error.message || "erro no backend"}`);
   });
 }
 
