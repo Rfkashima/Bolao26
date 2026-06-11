@@ -378,13 +378,17 @@ function compactGameCard(match) {
 function renderLatestVideosSection() {
   const videos = Array.isArray(state.videos) ? state.videos.slice(0, 6) : [];
 
+  if (!videos.length) {
+    return "";
+  }
+
   return `
     <section class="card">
       <div class="title-row">
         <h2>🎥 Últimos vídeos</h2>
         <span class="kicker">ScoreBat</span>
       </div>
-      ${videos.length ? `<div class="video-carousel">${videos.map(videoCard).join("")}</div>` : `<div class="info-box">Sem vídeos disponíveis no momento.</div>`}
+      <div class="video-carousel">${videos.map(videoCard).join("")}</div>
     </section>
   `;
 }

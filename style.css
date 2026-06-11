@@ -567,33 +567,34 @@ tr:last-child td {
 
 .sponsor-card {
   overflow: hidden;
-  background: linear-gradient(135deg, rgba(8,17,31,.97), rgba(21,94,239,.90));
-  color: #fff;
-  border: 0;
+  background: rgba(255,255,255,.90);
+  color: var(--text);
+  border: 1px solid rgba(34,197,94,.38);
 }
 
 .sponsor-wrap {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .sponsor-logo {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
+  width: 118px;
+  height: 38px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
-  background: rgba(255,255,255,.14);
-  border: 1px solid rgba(255,255,255,.22);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+  background: #fff;
+  border: 1px solid rgba(226,232,240,.95);
+  padding: 4px 6px;
   flex: 0 0 auto;
 }
 
-.sponsor-logo span {
-  font-size: 18px;
-  font-weight: 1000;
-  letter-spacing: -.06em;
+.sponsor-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .sponsor-text {
@@ -601,40 +602,40 @@ tr:last-child td {
 }
 
 .sponsor-label {
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
   letter-spacing: .12em;
-  opacity: .82;
-  font-weight: 900;
+  color: #16a34a;
+  font-weight: 950;
 }
 
 .sponsor-name {
-  margin-top: 2px;
-  font-size: 17px;
+  margin-top: 1px;
+  font-size: 14px;
   font-weight: 1000;
   letter-spacing: -.03em;
 }
 
 .sponsor-copy {
-  margin-top: 2px;
-  font-size: 12px;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 11px;
   opacity: .94;
-  font-weight: 800;
-  line-height: 1.3;
+  font-weight: 850;
+  line-height: 1.25;
 }
 
 .sponsor-card.compact .sponsor-logo {
-  width: 60px;
-  height: 60px;
-  padding: 7px;
+  width: 108px;
+  height: 34px;
 }
 
 .sponsor-card.compact .sponsor-name {
-  font-size: 15px;
+  font-size: 13px;
 }
 
 .sponsor-card.compact .sponsor-copy {
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .compact-games {
@@ -799,9 +800,8 @@ tr:last-child td {
   }
 
   .sponsor-logo {
-    width: 84px;
-    height: 84px;
-    padding: 9px;
+    width: 142px;
+    height: 44px;
   }
 
   .card {
