@@ -1,38 +1,113 @@
 :root {
-  --bg: #f4f7fb;
-  --panel: #ffffff;
-  --panel-2: #f8fafc;
-  --text: #101827;
-  --muted: #64748b;
-  --line: #dbe3ef;
-  --primary: #155eef;
-  --primary-dark: #0f47b8;
-  --green: #12805c;
+  --bg: #f5f7fb;
+  --panel: rgba(255,255,255,.84);
+  --panel-strong: rgba(255,255,255,.93);
+  --panel-soft: rgba(248,250,252,.88);
+  --text: #0f172a;
+  --muted: #5b6475;
+  --line: rgba(203, 213, 225, .92);
+  --primary: #145df2;
+  --primary-dark: #0e44b0;
+  --green: #15803d;
   --red: #b42318;
-  --amber: #b54708;
-  --shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
-  --radius: 18px;
+  --amber: #b45309;
+  --shadow: 0 18px 40px rgba(15, 23, 42, 0.10);
+  --radius: 20px;
 }
 
 * { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: radial-gradient(circle at top left, #dbeafe 0, transparent 34%), var(--bg);
+  background: var(--bg);
   color: var(--text);
+  position: relative;
+  min-height: 100vh;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: url("background-fifa-2026.jpg") center center / cover no-repeat;
+  opacity: .075;
+  pointer-events: none;
+  z-index: -2;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.82), rgba(245,247,251,.95));
+  pointer-events: none;
+  z-index: -1;
 }
 
 button, input, select {
   font: inherit;
 }
 
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
 .topbar {
+  padding: 22px clamp(16px, 4vw, 40px) 12px;
+}
+
+.hero-card {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  gap: 20px;
   align-items: flex-start;
-  padding: 34px clamp(18px, 4vw, 52px) 20px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(255,255,255,.72));
+  border: 1px solid rgba(255,255,255,.85);
+  border-radius: 26px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+}
+
+.hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.hero-mini-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 6px 0;
+}
+
+.quick-links a {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.6);
+  border: 1px solid rgba(203,213,225,.8);
+}
+
+.quick-links a:hover {
+  background: rgba(255,255,255,.92);
 }
 
 .eyebrow {
@@ -41,21 +116,42 @@ button, input, select {
   text-transform: uppercase;
   letter-spacing: .12em;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
 h1 {
   margin: 0;
-  font-size: clamp(32px, 5vw, 56px);
+  font-size: clamp(32px, 5vw, 52px);
   line-height: 1;
   letter-spacing: -0.05em;
 }
 
 .subtitle {
-  max-width: 720px;
+  max-width: 760px;
   color: var(--muted);
-  margin: 14px 0 0;
-  font-size: 17px;
+  margin: 12px 0 0;
+  font-size: 16px;
+}
+
+.section-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.section-title-row h2,
+.card h2,
+.card h3 {
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+.section-kicker {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .status-pill, .pill {
@@ -63,46 +159,27 @@ h1 {
   align-items: center;
   gap: 8px;
   border: 1px solid var(--line);
-  background: rgba(255,255,255,.78);
+  background: rgba(255,255,255,.86);
   border-radius: 999px;
   padding: 8px 12px;
   color: var(--muted);
   font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.pill.success { color: var(--green); border-color: #b7e4d2; background: #ecfdf5; }
-.pill.warning { color: var(--amber); border-color: #fed7aa; background: #fff7ed; }
-.pill.danger { color: var(--red); border-color: #fecaca; background: #fef2f2; }
-
-.tabs {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 0 clamp(18px, 4vw, 52px) 22px;
-}
-
-.tabs button {
-  border: 1px solid var(--line);
-  background: rgba(255,255,255,.76);
-  color: #334155;
-  padding: 10px 14px;
-  border-radius: 999px;
-  cursor: pointer;
   font-weight: 800;
   white-space: nowrap;
 }
 
-.tabs button.active {
-  background: var(--text);
-  color: #fff;
-  border-color: var(--text);
-}
+.pill.success, .status-pill.success { color: var(--green); border-color: #b7e4d2; background: #ecfdf5; }
+.pill.warning, .status-pill.warning { color: var(--amber); border-color: #fed7aa; background: #fff7ed; }
+.pill.danger, .status-pill.danger { color: var(--red); border-color: #fecaca; background: #fef2f2; }
 
 .container {
-  width: min(1180px, calc(100% - 32px));
-  margin: 0 auto 36px;
+  width: min(1240px, calc(100% - 28px));
+  margin: 0 auto 30px;
+}
+
+.page-stack {
+  display: grid;
+  gap: 16px;
 }
 
 .grid {
@@ -115,35 +192,31 @@ h1 {
 }
 
 .grid.two {
-  grid-template-columns: 1.2fr .8fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .card {
-  background: rgba(255,255,255,.9);
-  border: 1px solid rgba(219, 227, 239, .86);
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, .86);
   border-radius: var(--radius);
   padding: 18px;
   box-shadow: var(--shadow);
-}
-
-.card h2, .card h3 {
-  margin: 0 0 12px;
-  letter-spacing: -0.03em;
+  backdrop-filter: blur(10px);
 }
 
 .card p { color: var(--muted); }
 
 .kpi-label {
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: .06em;
+  letter-spacing: .08em;
 }
 
 .kpi-value {
   margin-top: 6px;
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1;
   font-weight: 900;
   letter-spacing: -0.04em;
@@ -164,23 +237,26 @@ h1 {
 
 .field label {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .06em;
 }
 
-select, input[type="number"] {
+select, input[type="number"], input[type="text"] {
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255,255,255,.96);
   padding: 10px 12px;
   min-height: 42px;
   color: var(--text);
 }
 
 input[type="number"] {
-  width: 72px;
+  width: 54px;
   text-align: center;
-  font-weight: 800;
+  font-weight: 900;
+  padding-inline: 6px;
 }
 
 .btn {
@@ -198,9 +274,9 @@ input[type="number"] {
 
 .table-wrap {
   overflow-x: auto;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(203,213,225,.8);
   border-radius: 16px;
-  background: #fff;
+  background: rgba(255,255,255,.92);
 }
 
 table {
@@ -210,32 +286,30 @@ table {
 }
 
 th, td {
-  border-bottom: 1px solid var(--line);
-  padding: 11px 12px;
+  border-bottom: 1px solid rgba(226,232,240,.95);
+  padding: 10px 12px;
   text-align: left;
   vertical-align: middle;
   font-size: 14px;
 }
 
 th {
-  background: #f8fafc;
+  background: rgba(248,250,252,.96);
   color: #334155;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: .06em;
+  letter-spacing: .07em;
 }
 
 tr:last-child td { border-bottom: 0; }
 
-.score-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.score-text {
+  font-weight: 900;
   white-space: nowrap;
 }
 
-.score-text {
-  font-weight: 900;
+.compact-match {
+  font-weight: 800;
   white-space: nowrap;
 }
 
@@ -266,6 +340,26 @@ tr:last-child td { border-bottom: 0; }
   color: #991b1b;
 }
 
+.deadline-list {
+  display: grid;
+  gap: 12px;
+}
+
+.deadline-box {
+  border: 1px solid rgba(191,219,254,.8);
+  background: rgba(239,246,255,.75);
+  color: #1e3a8a;
+  border-radius: 16px;
+  padding: 14px 16px;
+  font-weight: 700;
+}
+
+.deadline-box.danger {
+  border-color: #fecaca;
+  background: rgba(254,242,242,.88);
+  color: #991b1b;
+}
+
 .match-title {
   display: grid;
   gap: 3px;
@@ -280,6 +374,65 @@ tr:last-child td { border-bottom: 0; }
   font-size: 12px;
 }
 
+.bet-list {
+  display: grid;
+  gap: 10px;
+}
+
+.bet-row {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255,255,255,.9);
+  border: 1px solid rgba(226,232,240,.96);
+}
+
+.bet-row-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.bet-row-top .meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.bet-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.team-name {
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.team-name.right {
+  text-align: left;
+}
+
+.bet-x,
+.result-x {
+  font-weight: 900;
+  color: var(--muted);
+}
+
+.bet-venue {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.inline-result {
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 .group-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -290,11 +443,12 @@ tr:last-child td { border-bottom: 0; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 12px;
 }
 
 .list {
   margin: 0;
-  padding-left: 20px;
+  padding-left: 18px;
   color: var(--muted);
 }
 
@@ -304,14 +458,73 @@ tr:last-child td { border-bottom: 0; }
   display: flex;
   justify-content: space-between;
   gap: 14px;
-  padding: 24px clamp(18px, 4vw, 52px) 34px;
+  padding: 18px clamp(16px, 4vw, 40px) 28px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
 }
 
+@media (max-width: 1024px) {
+  .grid.cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .group-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 900px) {
-  .topbar { flex-direction: column; }
-  .grid.cards, .grid.two, .group-grid { grid-template-columns: 1fr; }
-  .footer { flex-direction: column; }
+  .hero-card,
+  .bet-row-top,
+  .grid.two,
+  .footer {
+    flex-direction: column;
+  }
+
+  .hero-side {
+    align-items: flex-start;
+  }
+
+  .hero-mini-info {
+    text-align: left;
+  }
+
+  .grid.two,
+  .group-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .container {
+    width: min(100% - 18px, 1240px);
+  }
+
+  .topbar {
+    padding: 14px 10px 10px;
+  }
+
+  .hero-card,
+  .card {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .grid.cards {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .bet-line {
+    gap: 6px;
+  }
+
+  .team-name {
+    font-size: 14px;
+  }
+
+  input[type="number"] {
+    width: 48px;
+    min-height: 38px;
+  }
+
+  .quick-links a {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
 }
