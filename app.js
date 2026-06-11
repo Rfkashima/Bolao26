@@ -228,6 +228,10 @@ function mergeMatches(list) {
     if (remote.score1 !== undefined) match.score1 = remote.score1 === null || remote.score1 === "" ? null : Number(remote.score1);
     if (remote.score2 !== undefined) match.score2 = remote.score2 === null || remote.score2 === "" ? null : Number(remote.score2);
     if (remote.status !== undefined) match.status = remote.status;
+    if (remote.elapsed !== undefined) match.elapsed = remote.elapsed;
+    if (remote.homeScorers !== undefined) match.homeScorers = remote.homeScorers;
+    if (remote.awayScorers !== undefined) match.awayScorers = remote.awayScorers;
+    if (remote.events !== undefined) match.events = remote.events;
   });
 }
 
@@ -392,7 +396,7 @@ function renderLiveSection() {
           <h2>🔴 Ao vivo</h2>
           <span class="kicker">Sem jogo ao vivo agora</span>
         </div>
-        <div class="info-box">Nenhum jogo em andamento no momento.</div>
+        <div class="info-box">Nenhum jogo em andamento no momento. Quando começar, esta área mostra tempo, placar e gols se a API enviar os eventos.</div>
       </section>
     `;
   }
@@ -655,6 +659,108 @@ function statCard(title, rows) {
   `;
 }
 
+
+function liveMatchDetails(match) {
+  const goals = liveGoals(match);
+  const elapsed = formatElapsed(match.elapsed);
+
+  return `
+    <div class="live-details">
+      <div class="live-meta">
+        <span class="live-dot"></span>
+        <strong>${elapsed ? `${elapsed} de jogo` : "Ao vivo"}</strong>
+        <span>${match.status || "em andamento"}</span>
+      </div>
+      ${goals.length
+        ? `<div class="goal-list">${goals.map((goal) => `
+            <div class="goal-item">
+              <span>${goal.minute ? `${goal.minute}'` : "Gol"}</span>
+              <strong>${escapeHtml(goal.player || "Gol")}</strong>
+              <em>${escapeHtml(goal.team || "")}</em>
+            </div>
+          `).join("")}</div>`
+        : `<div class="goal-list muted">Eventos/goleadores ainda não enviados pela API.</div>`
+      }
+    </div>
+  `;
+}
+
+function liveGoals(match) {
+  const home = normalizeGoalList(match.homeScorers, match.team1);
+  const away = normalizeGoalList(match.awayScorers, match.team2);
+  const events = normalizeGoalList(match.events, "");
+
+  const merged = home.concat(away);
+
+  events.forEach((event) => {
+    const type = String(event.type || "").toLowerCase();
+    if (type.includes("gol") || type.includes("goal")) {
+      merged.push(event);
+    }
+  });
+
+  const seen = new Set();
+
+  return merged
+    .filter((goal) => {
+      const key = `${goal.player || ""}|${goal.minute || ""}|${goal.team || ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return goal.player || goal.minute;
+    })
+    .sort((a, b) => Number(a.minute || 999) - Number(b.minute || 999));
+}
+
+function normalizeGoalList(value, team) {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (typeof item === "string") return parseGoalText(item, team);
+      return {
+        player: item.player || item.name || item.scorer || item.type || "Gol",
+        minute: item.minute || item.time || item.elapsed || "",
+        team: item.team || team || ""
+      };
+    }).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return normalizeGoalList(parsed, team);
+    } catch (_) {
+      return value.split(/[,;|]/).map((item) => parseGoalText(item, team)).filter(Boolean);
+    }
+  }
+
+  return [];
+}
+
+function parseGoalText(text, team) {
+  const raw = String(text || "").trim();
+  if (!raw || raw.toLowerCase() === "null") return null;
+
+  const match = raw.match(/^(.*?)\s*(?:[-–(]\s*)?(\d{1,3}(?:\+\d{1,2})?)['’]?\)?$/);
+
+  if (match && match[1].trim()) {
+    return { player: match[1].trim(), minute: match[2].trim(), team };
+  }
+
+  return { player: raw, minute: "", team };
+}
+
+function formatElapsed(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw || raw.toLowerCase() === "notstarted") return "";
+
+  if (/^\d/.test(raw)) return `${raw.replace(/['’]/g, "")}'`;
+
+  return raw.toUpperCase();
+}
+
+
 function gameCard(match) {
   return `
     <div class="game-card">
@@ -663,6 +769,7 @@ function gameCard(match) {
         <span>${formatDate(match.date)} · ${match.time}</span>
       </div>
       ${matchLine(match)}
+      ${isLiveMatch(match) ? liveMatchDetails(match) : ""}
       <div class="muted" style="font-size:11px;margin-top:5px">${match.venue}</div>
     </div>
   `;
@@ -1054,8 +1161,13 @@ function isRoundLocked(round) {
 
 function isLiveMatch(match) {
   const status = String(match.status || "").toLowerCase();
+  const elapsed = String(match.elapsed || "").toLowerCase();
 
   if (status.includes("vivo") || status.includes("live") || status.includes("andamento")) {
+    return true;
+  }
+
+  if (elapsed && !["notstarted", "not_started", "scheduled", "ns"].includes(elapsed) && !elapsed.includes("final") && elapsed !== "ft") {
     return true;
   }
 

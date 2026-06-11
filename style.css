@@ -1408,3 +1408,69 @@ tr:last-child td {
     font-size: 13px !important;
   }
 }
+
+
+/* Ao vivo real da API */
+.live-details {
+  margin-top: 9px;
+  border: 1px solid rgba(255,23,56,.30);
+  border-radius: 14px;
+  background: rgba(255,23,56,.08);
+  padding: 9px;
+}
+
+.live-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--world-red);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.live-meta span:last-child {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--world-red);
+  box-shadow: 0 0 0 5px rgba(255,23,56,.14), 0 0 16px rgba(255,23,56,.55);
+}
+
+.goal-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.goal-item {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  padding-top: 6px;
+}
+
+.goal-item span {
+  color: var(--world-green);
+  font-weight: 1000;
+}
+
+.goal-item strong {
+  color: var(--text);
+  font-weight: 950;
+}
+
+.goal-item em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+}
