@@ -5,6 +5,7 @@ const state = {
   view: localStorage.getItem("bolao-view") || "inicio",
   picks: {},
   selectedPlayer: localStorage.getItem("bolao-player") || "",
+  playerCode: localStorage.getItem("bolao-player-code") || "",
   betRound: localStorage.getItem("bolao-bet-round") || "Rodada 1",
   picksRound: localStorage.getItem("bolao-picks-round") || "Rodada 1",
   gamesRound: localStorage.getItem("bolao-games-round") || "Rodada 1",
@@ -15,6 +16,57 @@ const $ = (selector) => document.querySelector(selector);
 const app = $("#app");
 const rounds = [...new Set(DATA.matches.map((m) => m.round))];
 const groupStageRounds = ["Rodada 1", "Rodada 2", "Rodada 3"];
+
+const FLAGS = {
+  "África do Sul": "🇿🇦",
+  "Coreia do Sul": "🇰🇷",
+  "México": "🇲🇽",
+  "República Tcheca": "🇨🇿",
+  "Bósnia": "🇧🇦",
+  "Canadá": "🇨🇦",
+  "Catar": "🇶🇦",
+  "Suíça": "🇨🇭",
+  "Brasil": "🇧🇷",
+  "Escócia": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+  "Haiti": "🇭🇹",
+  "Marrocos": "🇲🇦",
+  "Austrália": "🇦🇺",
+  "Estados Unidos": "🇺🇸",
+  "Paraguai": "🇵🇾",
+  "Turquia": "🇹🇷",
+  "Alemanha": "🇩🇪",
+  "Costa do Marfim": "🇨🇮",
+  "Curaçao": "🇨🇼",
+  "Equador": "🇪🇨",
+  "Holanda": "🇳🇱",
+  "Japão": "🇯🇵",
+  "Suécia": "🇸🇪",
+  "Tunísia": "🇹🇳",
+  "Bélgica": "🇧🇪",
+  "Egito": "🇪🇬",
+  "Irã": "🇮🇷",
+  "Nova Zelândia": "🇳🇿",
+  "Arábia Saudita": "🇸🇦",
+  "Cabo Verde": "🇨🇻",
+  "Espanha": "🇪🇸",
+  "Uruguai": "🇺🇾",
+  "França": "🇫🇷",
+  "Iraque": "🇮🇶",
+  "Noruega": "🇳🇴",
+  "Senegal": "🇸🇳",
+  "Argélia": "🇩🇿",
+  "Argentina": "🇦🇷",
+  "Áustria": "🇦🇹",
+  "Jordânia": "🇯🇴",
+  "Colômbia": "🇨🇴",
+  "RD Congo": "🇨🇩",
+  "Portugal": "🇵🇹",
+  "Uzbequistão": "🇺🇿",
+  "Croácia": "🇭🇷",
+  "Gana": "🇬🇭",
+  "Inglaterra": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+  "Panamá": "🇵🇦"
+};
 
 function init() {
   $("#site-title").textContent = DATA.settings.title;
@@ -59,7 +111,8 @@ function mergePicks(list) {
     state.picks[pick.playerId][pick.matchId] = {
       g1: Number(pick.g1 ?? pick.goals1),
       g2: Number(pick.g2 ?? pick.goals2),
-      submittedAt: pick.submittedAt || new Date().toISOString()
+      submittedAt: pick.submittedAt || pick.updatedAt || new Date().toISOString(),
+      updatedAt: pick.updatedAt || pick.submittedAt || ""
     };
   });
 }
@@ -68,7 +121,7 @@ function flattenPicks() {
   const rows = [];
   Object.entries(state.picks).forEach(([playerId, picks]) => {
     Object.entries(picks).forEach(([matchId, pick]) => {
-      rows.push({ playerId, matchId, g1: pick.g1, g2: pick.g2, submittedAt: pick.submittedAt });
+      rows.push({ playerId, matchId, g1: pick.g1, g2: pick.g2, submittedAt: pick.submittedAt, updatedAt: pick.updatedAt });
     });
   });
   return rows;
@@ -124,12 +177,22 @@ function jsonp(url) {
 }
 
 function submitBackend(payload) {
-  if (!DATA.settings.apiUrl) return Promise.resolve();
-  return fetch(DATA.settings.apiUrl, {
-    method: "POST",
-    mode: "no-cors",
-    body: JSON.stringify(payload)
-  });
+  if (!DATA.settings.apiUrl) return Promise.resolve({ ok: true });
+
+  const compact = {
+    action: payload.action,
+    playerId: payload.playerId,
+    playerCode: payload.playerCode,
+    round: payload.round,
+    picks: payload.picks.map((pick) => ({
+      m: pick.matchId,
+      a: pick.g1,
+      b: pick.g2
+    }))
+  };
+
+  const url = `${DATA.settings.apiUrl}?action=savePicks&payload=${encodeURIComponent(JSON.stringify(compact))}`;
+  return jsonp(url);
 }
 
 function render() {
@@ -149,22 +212,14 @@ function render() {
 }
 
 function renderHome() {
-  const paid = DATA.players.filter((p) => p.paid).length;
   const potential = DATA.players.length * DATA.settings.entryFee;
 
   app.innerHTML = `
     <div class="stack">
-      <section class="grid cards">
-        ${kpi("Players", DATA.players.length)}
-        ${kpi("Jogos", DATA.matches.length)}
-        ${kpi("Entrada", money(DATA.settings.entryFee))}
-        ${kpi("Pagos", `${paid}/${DATA.players.length}`)}
-      </section>
-
       <section class="card">
         <div class="title-row">
-          <h2>Ranking dos players</h2>
-          <span class="kicker">Desempate: placares exatos</span>
+          <h2>🏆 Ranking dos players</h2>
+          <span class="kicker">Desempate: exatos</span>
         </div>
         ${rankingTable(calculateRanking())}
       </section>
@@ -172,34 +227,34 @@ function renderHome() {
       <section class="grid two">
         <div class="card">
           <div class="title-row">
-            <h2>Regras</h2>
+            <h2>📌 Regras</h2>
             <span class="kicker">Pontuação</span>
           </div>
           <ul class="list">
-            <li>Placar exato: <strong>${DATA.settings.exactScorePoints} pontos</strong>.</li>
-            <li>Resultado correto: <strong>${DATA.settings.resultPoints} ponto</strong>.</li>
-            <li>Palpites fecham <strong>${DATA.settings.lockHoursBeforeRound}h antes</strong> do primeiro jogo da rodada.</li>
-            <li>Desempate: maior número de placares exatos.</li>
+            <li>🎯 Placar exato: <strong>${DATA.settings.exactScorePoints} pontos</strong>.</li>
+            <li>✅ Resultado correto: <strong>${DATA.settings.resultPoints} ponto</strong>.</li>
+            <li>⏰ Palpites fecham <strong>${DATA.settings.lockHoursBeforeRound}h antes</strong> do primeiro jogo da rodada.</li>
+            <li>🥇 Desempate: maior número de placares exatos.</li>
           </ul>
         </div>
 
         <div class="card">
           <div class="title-row">
-            <h2>Premiação</h2>
+            <h2>💰 Premiação</h2>
             <span class="kicker">Total: ${money(potential)}</span>
           </div>
           <ul class="list">
-            <li>1º lugar: <strong>R$ 100,00</strong>.</li>
-            <li>2º lugar: <strong>R$ 60,00</strong>.</li>
-            <li>3º lugar: <strong>R$ 40,00</strong>.</li>
-            <li>4º lugar: <strong>R$ 20,00</strong>, inscrição de volta.</li>
+            <li>🥇 1º lugar: <strong>R$ 100,00</strong>.</li>
+            <li>🥈 2º lugar: <strong>R$ 60,00</strong>.</li>
+            <li>🥉 3º lugar: <strong>R$ 40,00</strong>.</li>
+            <li>🎟️ 4º lugar: <strong>R$ 20,00</strong>, inscrição de volta.</li>
           </ul>
         </div>
       </section>
 
       <section class="card">
         <div class="title-row">
-          <h2>Fechamento</h2>
+          <h2>⏳ Fechamento</h2>
           <span class="kicker">Por rodada</span>
         </div>
         <div class="deadline-list">
@@ -236,7 +291,7 @@ function renderGroupsSection() {
   return `
     <section>
       <div class="title-row">
-        <h2>Grupos</h2>
+        <h2>🌎 Grupos</h2>
         <span class="kicker">Oficial</span>
       </div>
       <div class="group-grid">
@@ -251,12 +306,11 @@ function groupCard(group, rows) {
     <div class="card group-card">
       <div class="group-head">
         <h3>${group.name}</h3>
-        <span class="pill">${group.teams.length} times</span>
       </div>
       <div class="group-teams">
         ${rows.map((row, index) => `
           <div class="group-team">
-            <span>${index + 1}. ${row.team}</span>
+            <span>${index + 1}. ${country(row.team)}</span>
             <span>${row.pts} pts</span>
           </div>
         `).join("")}
@@ -272,7 +326,7 @@ function renderGamesSection() {
   return `
     <section class="card">
       <div class="title-row">
-        <h2>Resultados oficiais</h2>
+        <h2>📅 Resultados oficiais</h2>
         <span class="kicker">Jogos</span>
       </div>
 
@@ -293,9 +347,9 @@ function renderGamesSection() {
               <span>${formatDate(m.date)} · ${m.time}</span>
             </div>
             <div class="game-line">
-              <span>${m.team1}</span>
+              <span>${country(m.team1)}</span>
               <span>${matchResultInline(m)}</span>
-              <span>${m.team2}</span>
+              <span>${country(m.team2)}</span>
             </div>
             <div class="muted" style="font-size:11px;margin-top:5px">${m.venue}</div>
           </div>
@@ -314,8 +368,8 @@ function renderBetSection() {
   return `
     <section class="card">
       <div class="title-row">
-        <h2>Enviar palpites</h2>
-        <span class="kicker">Brasil __ X __ Chile</span>
+        <h2>✍️ Enviar palpites</h2>
+        <span class="kicker">Pode editar até fechar</span>
       </div>
 
       <div class="toolbar">
@@ -325,6 +379,11 @@ function renderBetSection() {
             <option value="">Selecione</option>
             ${DATA.players.map((p) => `<option value="${p.id}" ${p.id === playerId ? "selected" : ""}>${p.name}</option>`).join("")}
           </select>
+        </div>
+
+        <div class="field">
+          <label>Senha/código</label>
+          <input id="playerCodeInput" type="password" value="${state.playerCode}" autocomplete="off" placeholder="Código do jogador">
         </div>
 
         <div class="field">
@@ -338,8 +397,8 @@ function renderBetSection() {
       </div>
 
       ${locked
-        ? `<div class="notice danger">${round} fechada. Prazo: ${formatDateTime(roundDeadline(round))}.</div>`
-        : `<div class="notice">${round} fecha em ${formatDateTime(roundDeadline(round))}.</div>`
+        ? `<div class="notice danger">🔒 ${round} fechada. Prazo: ${formatDateTime(roundDeadline(round))}.</div>`
+        : `<div class="notice">⏰ ${round} fecha em ${formatDateTime(roundDeadline(round))}. O último salvamento sobrescreve o anterior.</div>`
       }
 
       <div class="bet-list">
@@ -360,11 +419,11 @@ function betRow(match, playerId, locked) {
       </div>
 
       <div class="bet-line">
-        <span class="team">${match.team1}</span>
+        <span class="team">${country(match.team1)}</span>
         <input type="number" min="0" max="99" data-match="${match.id}" data-side="g1" value="${pick.g1 ?? ""}" ${locked ? "disabled" : ""}>
         <span class="x">X</span>
         <input type="number" min="0" max="99" data-match="${match.id}" data-side="g2" value="${pick.g2 ?? ""}" ${locked ? "disabled" : ""}>
-        <span class="team">${match.team2}</span>
+        <span class="team">${country(match.team2)}</span>
       </div>
     </div>
   `;
@@ -378,7 +437,7 @@ function renderPicksSection() {
   return `
     <section class="card">
       <div class="title-row">
-        <h2>Palpites enviados</h2>
+        <h2>👀 Palpites enviados</h2>
         <span class="kicker">Por rodada</span>
       </div>
 
@@ -391,23 +450,31 @@ function renderPicksSection() {
         </div>
       </div>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Jogo</th>
-              ${DATA.players.map((p) => `<th class="center">${p.name}</th>`).join("")}
-            </tr>
-          </thead>
-          <tbody>
-            ${matches.map((m) => `
-              <tr>
-                <td class="compact-match">${m.team1} x ${m.team2}</td>
-                ${DATA.players.map((p) => `<td class="center score-text">${shouldHide ? "Oculto" : formatPick(state.picks[p.id]?.[m.id])}</td>`).join("")}
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
+      <div class="picks-list">
+        ${matches.map((match) => `
+          <div class="pick-card">
+            <div class="pick-top">
+              <span>${match.group} · Jogo ${match.number}</span>
+              <span>${formatDate(match.date)} · ${match.time}</span>
+            </div>
+            <div class="pick-match-line">
+              <span>${country(match.team1)}</span>
+              <span>x</span>
+              <span>${country(match.team2)}</span>
+            </div>
+            <div class="player-picks">
+              ${DATA.players.map((player) => {
+                const pick = state.picks[player.id]?.[match.id];
+                return `
+                  <div class="player-pick">
+                    <span class="player-pick-name">${player.name}</span>
+                    <span class="player-pick-score">${shouldHide ? "Oculto" : formatPick(pick)}</span>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        `).join("")}
       </div>
     </section>
   `;
@@ -415,6 +482,7 @@ function renderPicksSection() {
 
 function bindEvents() {
   const playerSelect = $("#playerSelect");
+  const playerCodeInput = $("#playerCodeInput");
   const betRoundSelect = $("#betRoundSelect");
   const picksRoundSelect = $("#picksRoundSelect");
   const gamesRoundSelect = $("#gamesRoundSelect");
@@ -425,6 +493,13 @@ function bindEvents() {
       state.selectedPlayer = e.target.value;
       localStorage.setItem("bolao-player", state.selectedPlayer);
       render();
+    });
+  }
+
+  if (playerCodeInput) {
+    playerCodeInput.addEventListener("input", (e) => {
+      state.playerCode = e.target.value.trim();
+      localStorage.setItem("bolao-player-code", state.playerCode);
     });
   }
 
@@ -463,6 +538,11 @@ function saveRoundPicks(round) {
     return;
   }
 
+  if (!state.playerCode) {
+    alert("Informe a senha/código do jogador.");
+    return;
+  }
+
   if (isRoundLocked(round)) {
     alert("Rodada fechada para palpites.");
     return;
@@ -489,14 +569,24 @@ function saveRoundPicks(round) {
     });
   }
 
-  mergePicks(newPicks);
-  saveLocalPicks();
+  submitBackend({
+    action: "savePicks",
+    playerId: state.selectedPlayer,
+    playerCode: state.playerCode,
+    round,
+    picks: newPicks
+  }).then((response) => {
+    if (!response || response.ok === false) {
+      throw new Error(response?.error || "Não foi possível salvar.");
+    }
 
-  submitBackend({ action: "savePicks", playerId: state.selectedPlayer, round, picks: newPicks })
-    .finally(() => {
-      alert("Palpites salvos.");
-      render();
-    });
+    mergePicks(response.picks || newPicks);
+    saveLocalPicks();
+    alert("Palpites salvos.");
+    render();
+  }).catch((error) => {
+    alert(error.message || "Erro ao salvar os palpites.");
+  });
 }
 
 function rankingTable(ranking) {
@@ -649,7 +739,7 @@ function roundDeadlineCard(round) {
   const locked = isRoundLocked(round);
   return `
     <div class="deadline-box ${locked ? "danger" : ""}">
-      <strong>${round}</strong><br>
+      <strong>${locked ? "🔒" : "⏰"} ${round}</strong><br>
       ${locked ? "Fechada em" : "Fecha em"} ${formatDateTime(roundDeadline(round))}
     </div>
   `;
@@ -662,6 +752,11 @@ function kpi(label, value) {
       <div class="kpi-value">${value}</div>
     </div>
   `;
+}
+
+function country(name) {
+  const flag = FLAGS[name] || "🏳️";
+  return `<span class="country"><span class="flag">${flag}</span><span>${name}</span></span>`;
 }
 
 function formatPick(pick) {
