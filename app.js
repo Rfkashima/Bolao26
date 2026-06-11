@@ -2,6 +2,7 @@ const DATA = window.BOLAO_DATA;
 const STORE_KEY = "bolao-copa-2026-picks-v1";
 
 const state = {
+  view: localStorage.getItem("bolao-view") || "inicio",
   picks: {},
   selectedPlayer: localStorage.getItem("bolao-player") || "",
   betRound: localStorage.getItem("bolao-bet-round") || "Rodada 1",
@@ -19,8 +20,25 @@ function init() {
   $("#site-title").textContent = DATA.settings.title;
   mergePicks(DATA.initialPicks || []);
   loadLocalPicks();
+  bindMainSwitch();
   loadBackendState();
   render();
+}
+
+function bindMainSwitch() {
+  document.querySelectorAll(".main-switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.view = button.dataset.view;
+      localStorage.setItem("bolao-view", state.view);
+      render();
+    });
+  });
+}
+
+function setActiveSwitch() {
+  document.querySelectorAll(".main-switch button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === state.view);
+  });
 }
 
 function loadLocalPicks() {
@@ -135,8 +153,21 @@ function submitBackend(payload) {
 }
 
 function render() {
+  setActiveSwitch();
+
+  const pages = {
+    inicio: renderHomePage,
+    oficial: renderOfficialPage,
+    palpites: renderPicksAreaPage
+  };
+
+  pages[state.view]();
+}
+
+function renderHomePage() {
   const paid = DATA.players.filter((p) => p.paid).length;
   const ranking = calculateRanking();
+  const potential = DATA.players.length * DATA.settings.entryFee;
 
   app.innerHTML = `
     <div class="page-stack">
@@ -150,32 +181,72 @@ function render() {
       <section class="grid two">
         <div class="card">
           <div class="section-title-row">
-            <h2>Próximos fechamentos</h2>
-            <span class="section-kicker">Trava automática por rodada</span>
+            <h2>Ranking dos players</h2>
+            <span class="section-kicker">Desempate: placares exatos</span>
+          </div>
+          ${rankingTable(ranking)}
+        </div>
+
+        <div class="card">
+          <div class="section-title-row">
+            <h2>Fechamento das rodadas</h2>
+            <span class="section-kicker">2h antes do primeiro jogo</span>
           </div>
           <div class="deadline-list">
             ${rounds.slice(0, 4).map(roundDeadlineCard).join("")}
           </div>
         </div>
+      </section>
+
+      <section class="grid two">
+        <div class="card">
+          <div class="section-title-row">
+            <h2>Regras</h2>
+            <span class="section-kicker">Pontuação</span>
+          </div>
+          <ul class="list">
+            <li>Placar exato vale <strong>${DATA.settings.exactScorePoints} pontos</strong>.</li>
+            <li>Resultado correto, sem acertar o placar, vale <strong>${DATA.settings.resultPoints} ponto</strong>.</li>
+            <li>Exemplo: resultado oficial Brasil 2 x 1 Marrocos. Palpite 2 x 1 soma 3 pontos. Palpite 1 x 0 soma 1 ponto.</li>
+            <li>Os palpites fecham <strong>${DATA.settings.lockHoursBeforeRound}h antes do primeiro jogo da rodada</strong>.</li>
+            <li>Critério de desempate: maior número de placares exatos.</li>
+          </ul>
+        </div>
 
         <div class="card">
           <div class="section-title-row">
-            <h2>Ranking parcial</h2>
-            <span class="section-kicker">Resumo dos primeiros colocados</span>
+            <h2>Premiação</h2>
+            <span class="section-kicker">Total: ${money(potential)}</span>
           </div>
-          ${rankingTable(ranking.slice(0, 8))}
+          <ul class="list">
+            <li>1º lugar: <strong>R$ 100,00</strong>.</li>
+            <li>2º lugar: <strong>R$ 60,00</strong>.</li>
+            <li>3º lugar: <strong>R$ 40,00</strong>.</li>
+            <li>4º lugar: <strong>R$ 20,00</strong>, inscrição de volta.</li>
+          </ul>
         </div>
       </section>
-
-      ${renderBetSection()}
-      ${renderRankingSection()}
-      ${renderPicksSection()}
-      ${renderGamesSection()}
-      ${renderGroupsSection()}
-      ${renderRulesAndPrizeSections()}
     </div>
   `;
+}
 
+function renderOfficialPage() {
+  app.innerHTML = `
+    <div class="page-stack">
+      ${renderGamesSection()}
+      ${renderGroupsSection()}
+    </div>
+  `;
+  bindEvents();
+}
+
+function renderPicksAreaPage() {
+  app.innerHTML = `
+    <div class="page-stack">
+      ${renderBetSection()}
+      ${renderPicksSection()}
+    </div>
+  `;
   bindEvents();
 }
 
@@ -188,7 +259,7 @@ function renderBetSection() {
   return `
     <section class="card" id="section-palpitar">
       <div class="section-title-row">
-        <h2>Palpitar</h2>
+        <h2>Enviar palpites</h2>
         <span class="section-kicker">Formato: Brasil __ X __ Chile</span>
       </div>
 
@@ -213,7 +284,7 @@ function renderBetSection() {
 
       ${locked
         ? `<div class="notice danger">${round} fechada. O prazo era ${formatDateTime(roundDeadline(round))}.</div>`
-        : `<div class="notice">${round} fecha em ${formatDateTime(roundDeadline(round))}. Prazo: 2h antes do primeiro jogo da rodada.</div>`
+        : `<div class="notice">${round} fecha em ${formatDateTime(roundDeadline(round))}.</div>`
       }
 
       <div class="bet-list">
@@ -244,47 +315,6 @@ function betRow(match, playerId, locked) {
   `;
 }
 
-function renderRankingSection() {
-  return `
-    <section class="card" id="section-ranking">
-      <div class="section-title-row">
-        <h2>Ranking dos jogadores</h2>
-        <span class="section-kicker">Desempate: mais placares exatos</span>
-      </div>
-      ${rankingTable(calculateRanking())}
-    </section>
-  `;
-}
-
-function rankingTable(ranking) {
-  return `
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Posição</th>
-            <th>Jogador</th>
-            <th class="center">Pontos</th>
-            <th class="center">Placares exatos</th>
-            <th class="center">Resultados</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${ranking.map((row, index) => `
-            <tr>
-              <td class="strong">${index + 1}º</td>
-              <td>${row.name}</td>
-              <td class="center strong">${row.points}</td>
-              <td class="center">${row.exacts}</td>
-              <td class="center">${row.results}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-
 function renderPicksSection() {
   const round = rounds.includes(state.picksRound) ? state.picksRound : rounds[0];
   const matches = DATA.matches.filter((m) => m.round === round);
@@ -294,7 +324,7 @@ function renderPicksSection() {
     <section class="card" id="section-palpites">
       <div class="section-title-row">
         <h2>Palpites enviados</h2>
-        <span class="section-kicker">Visualização por rodada</span>
+        <span class="section-kicker">Por rodada</span>
       </div>
 
       <div class="toolbar">
@@ -337,8 +367,8 @@ function renderGamesSection() {
   return `
     <section class="card" id="section-jogos">
       <div class="section-title-row">
-        <h2>Jogos</h2>
-        <span class="section-kicker">Resultados oficiais quando preenchidos</span>
+        <h2>Resultados oficiais</h2>
+        <span class="section-kicker">Jogos e placares oficiais</span>
       </div>
 
       <div class="toolbar">
@@ -388,8 +418,9 @@ function renderGroupsSection() {
     <section id="section-grupos">
       <div class="section-title-row">
         <h2>Grupos</h2>
-        <span class="section-kicker">Classificação automática quando houver resultados</span>
+        <span class="section-kicker">Classificação oficial</span>
       </div>
+
       <div class="group-grid">
         ${DATA.groups.map((g) => groupCard(g, standings[g.id] || [])).join("")}
       </div>
@@ -426,51 +457,6 @@ function groupCard(group, rows) {
         </table>
       </div>
     </div>
-  `;
-}
-
-function renderRulesAndPrizeSections() {
-  const paid = DATA.players.filter((p) => p.paid).length;
-  const potential = DATA.players.length * DATA.settings.entryFee;
-  const collected = paid * DATA.settings.entryFee;
-
-  return `
-    <section class="grid two">
-      <div class="card" id="section-regras">
-        <div class="section-title-row">
-          <h2>Regras do bolão</h2>
-          <span class="section-kicker">Resumo oficial</span>
-        </div>
-        <ul class="list">
-          <li>Placar exato vale <strong>${DATA.settings.exactScorePoints} pontos</strong>.</li>
-          <li>Resultado correto, sem acertar o placar, vale <strong>${DATA.settings.resultPoints} ponto</strong>.</li>
-          <li>Exemplo: resultado oficial Brasil 2 x 1 Marrocos. Palpite 2 x 1 soma 3 pontos. Palpite 1 x 0 soma 1 ponto.</li>
-          <li>Os palpites fecham <strong>${DATA.settings.lockHoursBeforeRound}h antes do primeiro jogo da rodada</strong>.</li>
-          <li>Critério de desempate: maior número de placares exatos.</li>
-        </ul>
-      </div>
-
-      <div class="card" id="section-premiacao">
-        <div class="section-title-row">
-          <h2>Premiação</h2>
-          <span class="section-kicker">Total distribuído: ${money(potential)}</span>
-        </div>
-
-        <div class="grid cards">
-          ${kpi("Inscrição", money(DATA.settings.entryFee))}
-          ${kpi("Participantes", DATA.players.length)}
-          ${kpi("Arrecadado", money(collected))}
-          ${kpi("Potencial", money(potential))}
-        </div>
-
-        <ul class="list" style="margin-top:16px">
-          <li>1º lugar: <strong>R$ 100,00</strong>.</li>
-          <li>2º lugar: <strong>R$ 60,00</strong>.</li>
-          <li>3º lugar: <strong>R$ 40,00</strong>.</li>
-          <li>4º lugar: <strong>R$ 20,00</strong>, inscrição de volta.</li>
-        </ul>
-      </div>
-    </section>
   `;
 }
 
@@ -564,6 +550,35 @@ function saveRoundPicks(round) {
     alert("Palpites salvos.");
     render();
   });
+}
+
+function rankingTable(ranking) {
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Posição</th>
+            <th>Jogador</th>
+            <th class="center">Pontos</th>
+            <th class="center">Placares exatos</th>
+            <th class="center">Resultados</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${ranking.map((row, index) => `
+            <tr>
+              <td class="strong">${index + 1}º</td>
+              <td>${row.name}</td>
+              <td class="center strong">${row.points}</td>
+              <td class="center">${row.exacts}</td>
+              <td class="center">${row.results}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function calculateRanking() {

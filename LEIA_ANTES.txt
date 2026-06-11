@@ -1,9 +1,8 @@
-Subir no GitHub apenas estes 5 arquivos na raiz do repositório:
+Arquivos desta atualização:
 - index.html
 - style.css
 - app.js
-- data.js
 - background-fifa-2026.jpg
 
-Não subir o ZIP fechado.
-Depois do commit, aguardar 1 a 2 minutos e abrir com Ctrl + F5.
+No GitHub, envie esses arquivos para a raiz do repositório e confirme a substituição.
+Não precisa mexer no data.js nesta atualização.
