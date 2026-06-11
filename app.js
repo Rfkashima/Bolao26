@@ -8,6 +8,7 @@ const state = {
   drafts: {},
   stats: {},
   videos: [],
+  scorebat: {},
   selectedPlayer: localStorage.getItem("bolao-player") || "",
   playerCode: localStorage.getItem("bolao-player-code") || "",
   betRound: localStorage.getItem("bolao-bet-round") || "Rodada 1",
@@ -18,6 +19,7 @@ const state = {
 
 const $ = (selector) => document.querySelector(selector);
 const app = $("#app");
+let backendRefreshTimer = null;
 const rounds = [...new Set(DATA.matches.map((m) => m.round))];
 const groupStageRounds = ["Rodada 1", "Rodada 2", "Rodada 3"];
 
@@ -107,6 +109,7 @@ function init() {
   loadDrafts();
   bindMainTabs();
   loadBackendState();
+  setupAutoRefresh();
   render();
 }
 
@@ -235,13 +238,13 @@ function mergeMatches(list) {
   });
 }
 
-function loadBackendState() {
+function loadBackendState(silent = false) {
   if (!DATA.settings.apiUrl) {
     setBackendStatus("Modo local", "");
     return;
   }
 
-  setBackendStatus("Conectando...", "warning");
+  if (!silent) setBackendStatus("Conectando...", "warning");
 
   jsonp(`${DATA.settings.apiUrl}?action=state`)
     .then((payload) => {
@@ -258,8 +261,26 @@ function loadBackendState() {
       setBackendStatus("Online", "success");
       render();
     })
-    .catch(() => setBackendStatus("Falha no backend", "danger"));
+    .catch(() => { if (!silent) setBackendStatus("Falha no backend", "danger"); });
 }
+
+
+function setupAutoRefresh() {
+  if (backendRefreshTimer) {
+    return;
+  }
+
+  backendRefreshTimer = window.setInterval(() => {
+    loadBackendState(true);
+  }, 60000);
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      loadBackendState(true);
+    }
+  });
+}
+
 
 function setBackendStatus(text, type) {
   const el = $("#backend-status");
@@ -452,16 +473,29 @@ function compactGameCard(match) {
 
 function renderLatestVideosSection() {
   const videos = Array.isArray(state.videos) ? state.videos.slice(0, 6) : [];
+  const scorebat = state.scorebat || {};
+  const emptyMessage = scorebat.message || "Aguardando vídeos do ScoreBat.";
 
   if (!videos.length) {
-    return "";
+    return `
+      <section class="card video-status-card">
+        <div class="title-row">
+          <h2>🎥 Vídeos</h2>
+          <span class="kicker">ScoreBat</span>
+        </div>
+        <div class="scorebat-empty">
+          <strong>Nenhum vídeo disponível agora.</strong>
+          <span>${escapeHtml(emptyMessage)}</span>
+        </div>
+      </section>
+    `;
   }
 
   return `
     <section class="card">
       <div class="title-row">
         <h2>🎥 Últimos vídeos</h2>
-        <span class="kicker">ScoreBat</span>
+        <span class="kicker">ScoreBat · ${videos.length}</span>
       </div>
       <div class="video-carousel">${videos.map(videoCard).join("")}</div>
     </section>
@@ -663,13 +697,27 @@ function statCard(title, rows) {
 function liveMatchDetails(match) {
   const goals = liveGoals(match);
   const elapsed = formatElapsed(match.elapsed);
+  const hasScore = match.score1 !== null && match.score1 !== undefined && match.score2 !== null && match.score2 !== undefined;
+  const status = liveStatusLabel(match);
+
+  if (!goals.length && !elapsed && !hasScore) {
+    return `
+      <div class="live-details live-details-clean">
+        <div class="live-meta">
+          <span class="live-dot"></span>
+          <strong>Em andamento</strong>
+          <span>Aguardando atualização da API</span>
+        </div>
+      </div>
+    `;
+  }
 
   return `
-    <div class="live-details">
+    <div class="live-details ${goals.length ? "" : "live-details-clean"}">
       <div class="live-meta">
         <span class="live-dot"></span>
-        <strong>${elapsed ? `${elapsed} de jogo` : "Ao vivo"}</strong>
-        <span>${match.status || "em andamento"}</span>
+        <strong>${elapsed ? `${elapsed} de jogo` : status}</strong>
+        <span>${goals.length ? "Gols confirmados" : "Aguardando eventos"}</span>
       </div>
       ${goals.length
         ? `<div class="goal-list">${goals.map((goal) => `
@@ -679,10 +727,20 @@ function liveMatchDetails(match) {
               <em>${escapeHtml(goal.team || "")}</em>
             </div>
           `).join("")}</div>`
-        : `<div class="goal-list muted">Eventos/goleadores ainda não enviados pela API.</div>`
+        : ""
       }
     </div>
   `;
+}
+
+function liveStatusLabel(match) {
+  const status = String(match.status || "").toLowerCase();
+
+  if (status.includes("final")) {
+    return "Finalizado";
+  }
+
+  return "Em andamento";
 }
 
 function liveGoals(match) {
