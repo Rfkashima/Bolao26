@@ -9,6 +9,7 @@ const state = {
   stats: {},
   videos: [],
   scorebat: {},
+  dataSource: {},
   selectedPlayer: localStorage.getItem("bolao-player") || "",
   playerCode: localStorage.getItem("bolao-player-code") || "",
   betRound: localStorage.getItem("bolao-bet-round") || "Rodada 1",
@@ -235,6 +236,10 @@ function mergeMatches(list) {
     if (remote.homeScorers !== undefined) match.homeScorers = remote.homeScorers;
     if (remote.awayScorers !== undefined) match.awayScorers = remote.awayScorers;
     if (remote.events !== undefined) match.events = remote.events;
+    if (remote.injuryTime !== undefined) match.injuryTime = remote.injuryTime;
+    if (remote.source !== undefined) match.source = remote.source;
+    if (remote.sourceStatus !== undefined) match.sourceStatus = remote.sourceStatus;
+    if (remote.sourceUpdatedAt !== undefined) match.sourceUpdatedAt = remote.sourceUpdatedAt;
   });
 }
 
@@ -257,6 +262,7 @@ function loadBackendState(silent = false) {
       mergeMatches(payload.matches || []);
       state.stats = payload.stats || state.stats || {};
       state.videos = payload.videos || state.videos || [];
+      state.dataSource = payload.dataSource || state.dataSource || {};
       state.loadedBackend = true;
       setBackendStatus("Online", "success");
       render();
@@ -409,15 +415,18 @@ function renderHome() {
 
 function renderLiveSection() {
   const live = DATA.matches.filter((match) => isLiveMatch(match));
+  const source = currentFootballSourceLabel();
 
   if (!live.length) {
     return `
       <section class="card">
         <div class="title-row">
           <h2>🔴 Ao vivo</h2>
-          <span class="kicker">Sem jogo ao vivo agora</span>
+          <span class="kicker">${escapeHtml(source)}</span>
         </div>
-        <div class="info-box">Nenhum jogo em andamento no momento. Quando começar, esta área mostra tempo, placar e gols se a API enviar os eventos.</div>
+        <div class="info-box">
+          Nenhum jogo em andamento no momento. O plano gratuito do Football-Data.org entrega os placares com atraso.
+        </div>
       </section>
     `;
   }
@@ -426,7 +435,7 @@ function renderLiveSection() {
     <section class="card">
       <div class="title-row">
         <h2>🔴 Ao vivo</h2>
-        <span class="live-pill">Em andamento</span>
+        <span class="live-pill">${escapeHtml(source)}</span>
       </div>
       <div class="games-list">
         ${live.map(gameCard).join("")}
@@ -435,6 +444,24 @@ function renderLiveSection() {
   `;
 }
 
+function currentFootballSourceLabel() {
+  const source = state.dataSource || {};
+  const name = String(source.name || "").trim();
+
+  if (!name) {
+    return "Fonte aguardando sincronização";
+  }
+
+  if (name === "Football-Data.org") {
+    return "Football-Data.org · dados com atraso";
+  }
+
+  if (source.mode === "fallback") {
+    return `${name} · fonte alternativa`;
+  }
+
+  return name;
+}
 
 function renderUpcomingGamesSection() {
   const now = new Date();
@@ -563,6 +590,10 @@ function renderSponsorBlock(compact = false) {
           <div class="sponsor-name">IA Pro Contato</div>
           <div class="sponsor-copy">Atendimento automatizado e ERP</div>
         </div>
+      </div>
+      <div class="data-provider-credit">
+        Dados de futebol fornecidos pela API Football-Data.org.
+        <span>${escapeHtml(currentFootballSourceLabel())}</span>
       </div>
     </section>
   `;

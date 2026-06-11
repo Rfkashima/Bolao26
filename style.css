@@ -1410,22 +1410,34 @@ tr:last-child td {
 }
 
 
-/* Ao vivo real da API */
+/* Ao vivo real da API - visual limpo */
 .live-details {
   margin-top: 9px;
-  border: 1px solid rgba(255,23,56,.30);
+  border: 1px solid rgba(0,167,255,.26);
   border-radius: 14px;
-  background: rgba(255,23,56,.08);
-  padding: 9px;
+  background:
+    linear-gradient(90deg, rgba(0,167,255,.10), rgba(34,255,74,.06), rgba(255,23,56,.08));
+  padding: 9px 10px;
+}
+
+.live-details-clean {
+  border-color: rgba(0,167,255,.20);
+  background: rgba(0,167,255,.055);
 }
 
 .live-meta {
   display: flex;
   align-items: center;
   gap: 7px;
-  color: var(--world-red);
+  color: var(--text);
   font-size: 12px;
   font-weight: 950;
+}
+
+.live-meta strong {
+  color: var(--world-red);
+  text-transform: uppercase;
+  letter-spacing: .02em;
 }
 
 .live-meta span:last-child {
@@ -1437,6 +1449,7 @@ tr:last-child td {
 .live-dot {
   width: 8px;
   height: 8px;
+  flex: 0 0 auto;
   border-radius: 999px;
   background: var(--world-red);
   box-shadow: 0 0 0 5px rgba(255,23,56,.14), 0 0 16px rgba(255,23,56,.55);
@@ -1473,4 +1486,199 @@ tr:last-child td {
   font-style: normal;
   font-size: 11px;
   font-weight: 800;
+}
+
+.live-pill,
+.kicker {
+  border-color: rgba(255,23,56,.26);
+  background: rgba(255,23,56,.10);
+  color: var(--world-red);
+}
+
+.match-score {
+  min-width: 86px;
+  color: var(--text);
+  text-shadow: 0 0 12px rgba(255,255,255,.28);
+}
+
+@media (max-width: 520px) {
+  .live-details {
+    padding: 8px;
+  }
+
+  .live-meta {
+    flex-wrap: wrap;
+    font-size: 11px;
+  }
+
+  .goal-item {
+    grid-template-columns: 32px 1fr;
+  }
+
+  .goal-item em {
+    grid-column: 2;
+  }
+}
+
+
+/* Correção de legibilidade - Palpites e tabelas */
+.notice,
+.deadline-box,
+.info-box {
+  border-color: rgba(0,167,255,.34) !important;
+  background: rgba(4, 12, 28, .92) !important;
+  color: var(--text) !important;
+}
+
+.notice strong,
+.deadline-box strong,
+.info-box strong {
+  color: #ffffff !important;
+}
+
+.notice.danger,
+.deadline-box.danger {
+  border-color: rgba(255,23,56,.48) !important;
+  background: rgba(55, 8, 18, .92) !important;
+  color: #ffe8ed !important;
+}
+
+.bet-row,
+.pick-card,
+.player-pick,
+.compact-game,
+.stat-card,
+.game-card {
+  background: rgba(4, 11, 24, .94) !important;
+  color: var(--text) !important;
+  border-color: rgba(0,167,255,.32) !important;
+}
+
+.player-pick {
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.035);
+}
+
+.player-pick-name,
+.player-pick-date,
+.bet-meta,
+.game-top,
+.pick-top,
+.compact-game-meta {
+  color: #b8c8da !important;
+}
+
+.player-pick-score,
+.score-text,
+.compact-match,
+.match-score,
+.team,
+.country,
+.compact-country {
+  color: #ffffff !important;
+}
+
+select,
+input[type="number"],
+input[type="password"],
+input[type="text"] {
+  background: #020814 !important;
+  color: #ffffff !important;
+  border-color: rgba(0,167,255,.45) !important;
+}
+
+select option {
+  background: #061225 !important;
+  color: #ffffff !important;
+}
+
+input::placeholder {
+  color: #8da3bd !important;
+}
+
+.btn:disabled {
+  background: rgba(71,85,105,.72) !important;
+  color: #cbd5e1 !important;
+}
+
+.table-wrap {
+  background: rgba(4, 11, 24, .94) !important;
+  border-color: rgba(0,167,255,.30) !important;
+}
+
+th {
+  background: rgba(0,167,255,.14) !important;
+  color: #eaf7ff !important;
+  border-bottom-color: rgba(0,167,255,.24) !important;
+}
+
+td {
+  color: var(--text) !important;
+  border-bottom-color: rgba(255,255,255,.08) !important;
+}
+
+tr:nth-child(even) td {
+  background: rgba(255,255,255,.025);
+}
+
+/* ScoreBat visível mesmo quando vazio */
+.video-status-card {
+  border-color: rgba(0,167,255,.32) !important;
+}
+
+.scorebat-empty {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(0,167,255,.26);
+  border-radius: 14px;
+  background: rgba(0,167,255,.06);
+  padding: 11px 12px;
+}
+
+.scorebat-empty strong {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.scorebat-empty span {
+  color: #b8c8da;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+
+/* Football-Data.org */
+.data-provider-credit {
+  margin-top: 9px;
+  border-top: 1px solid rgba(0,167,255,.18);
+  padding-top: 8px;
+  color: #9fb1c7;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.data-provider-credit span {
+  display: block;
+  margin-top: 2px;
+  color: #d9eaff;
+  font-weight: 900;
+}
+
+.live-pill {
+  max-width: min(64vw, 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 520px) {
+  .data-provider-credit {
+    font-size: 8px;
+  }
+
+  .live-pill {
+    max-width: 52vw;
+    font-size: 8px;
+  }
 }
