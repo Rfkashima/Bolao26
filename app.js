@@ -5,6 +5,7 @@ const state = {
   view: localStorage.getItem("bolao-view") || "inicio",
   picks: {},
   stats: {},
+  videos: [],
   selectedPlayer: localStorage.getItem("bolao-player") || "",
   playerCode: localStorage.getItem("bolao-player-code") || "",
   betRound: localStorage.getItem("bolao-bet-round") || "Rodada 1",
@@ -27,6 +28,16 @@ const ROUND_LABELS = {
   "Rodada 6": "Quartas de final",
   "Rodada 7": "Semifinais",
   "Rodada 8": "Final e 3º lugar"
+};
+
+const SHORT_COUNTRY_NAMES = {
+  "República Tcheca": "Rep. Tcheca",
+  "África do Sul": "África Sul",
+  "Coreia do Sul": "Coreia Sul",
+  "Estados Unidos": "EUA",
+  "Costa do Marfim": "C. do Marfim",
+  "Arábia Saudita": "Arábia Saud.",
+  "Nova Zelândia": "N. Zelândia"
 };
 
 const FLAGS = {
@@ -167,6 +178,7 @@ function loadBackendState() {
       mergePicks(payload.picks || []);
       mergeMatches(payload.matches || []);
       state.stats = payload.stats || state.stats || {};
+      state.videos = payload.videos || state.videos || [];
       state.loadedBackend = true;
       setBackendStatus("Online", "success");
       render();
@@ -246,6 +258,7 @@ function renderHome() {
     <div class="stack">
       ${renderLiveSection()}
       ${renderUpcomingGamesSection()}
+      ${renderLatestVideosSection()}
 
       <section class="card">
         <div class="title-row">
@@ -292,6 +305,8 @@ function renderHome() {
           ${rounds.slice(0, 4).map(roundDeadlineCard).join("")}
         </div>
       </section>
+
+      ${renderSponsorBlock()}
     </div>
   `;
 }
@@ -359,12 +374,56 @@ function compactGameCard(match) {
   `;
 }
 
+
+function renderLatestVideosSection() {
+  const videos = Array.isArray(state.videos) ? state.videos.slice(0, 6) : [];
+
+  return `
+    <section class="card">
+      <div class="title-row">
+        <h2>🎥 Últimos vídeos</h2>
+        <span class="kicker">ScoreBat</span>
+      </div>
+      ${videos.length ? `<div class="video-carousel">${videos.map(videoCard).join("")}</div>` : `<div class="info-box">Sem vídeos disponíveis no momento.</div>`}
+    </section>
+  `;
+}
+
+function videoCard(video) {
+  const title = escapeHtml(video.title || "Vídeo");
+  const competition = escapeHtml(video.competition || "Futebol");
+  const date = escapeHtml(video.date || "");
+  const thumbnail = video.thumbnail ? `<img src="${video.thumbnail}" alt="${title}">` : `<div class="video-thumb-empty">▶</div>`;
+
+  return `
+    <article class="video-card">
+      <a href="${video.url || "#"}" target="_blank" rel="noopener">
+        <div class="video-thumb">${thumbnail}</div>
+        <div class="video-body">
+          <strong>${title}</strong>
+          <span>${competition}${date ? ` · ${date}` : ""}</span>
+        </div>
+      </a>
+    </article>
+  `;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function renderOfficial() {
   app.innerHTML = `
     <div class="stack">
       ${renderGroupsSection()}
       ${renderKnockoutSection()}
       ${renderStatsSection()}
+      ${renderSponsorBlock(true)}
     </div>
   `;
   bindEvents();
@@ -375,9 +434,25 @@ function renderPicksArea() {
     <div class="stack">
       ${renderBetSection()}
       ${renderPicksSection()}
+      ${renderSponsorBlock(true)}
     </div>
   `;
   bindEvents();
+}
+
+function renderSponsorBlock(compact = false) {
+  return `
+    <section class="card sponsor-card ${compact ? "compact" : ""}">
+      <div class="sponsor-wrap">
+        <div class="sponsor-logo"><img src="logo-ia-pro-contato.png" alt="IA Pro Contato"></div>
+        <div class="sponsor-text">
+          <div class="sponsor-label">Patrocínio</div>
+          <div class="sponsor-name">IA Pro Contato</div>
+          <div class="sponsor-copy">Atendimento automatizado e ERP</div>
+        </div>
+      </div>
+    </section>
+  `;
 }
 
 function renderGroupsSection() {
@@ -919,7 +994,8 @@ function roundDeadlineCard(round) {
 
 function country(name) {
   const flag = FLAGS[name] || "🏳️";
-  return `<span class="country"><span class="flag">${flag}</span><span>${name}</span></span>`;
+  const label = SHORT_COUNTRY_NAMES[name] || name;
+  return `<span class="country"><span class="flag">${flag}</span><span>${label}</span></span>`;
 }
 
 function compactCountry(name) {
