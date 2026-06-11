@@ -1,9 +1,0 @@
-Atualização mobile/estrutura.
-
-Subir na raiz do GitHub somente:
-- index.html
-- style.css
-- app.js
-
-Não precisa subir data.js.
-Não precisa subir background-fifa-2026.jpg.
