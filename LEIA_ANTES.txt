@@ -1,0 +1,17 @@
+Para atualizar o site no GitHub:
+
+1. Extraia este ZIP no computador.
+2. Abra a pasta bolao26_atualizado_subir_no_github.
+3. No GitHub, entre no repositório Bolao26.
+4. Use Add file > Upload files.
+5. Arraste estes arquivos para a raiz do repositório:
+   - index.html
+   - style.css
+   - app.js
+   - data.js
+   - background-fifa-2026.jpg
+6. Confirme o commit.
+7. Aguarde 1 a 2 minutos e abra https://rfkashima.github.io/Bolao26/
+8. Aperte Ctrl + F5.
+
+Não envie o ZIP fechado para o repositório. O GitHub Pages não descompacta o arquivo automaticamente.
