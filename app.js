@@ -516,6 +516,7 @@ function getFinishedMatchCount() {
 
 function renderLastFinishedMatch(match) {
   const goals = liveGoals(match);
+  const cards = matchCards(match);
 
   return `
     <section class="card last-match-section">
@@ -537,12 +538,32 @@ function renderLastFinishedMatch(match) {
         </div>
 
         ${goals.length ? `
+          <div class="finished-events-title">Gols</div>
           <div class="finished-goals">
             ${goals.map((goal) => `
               <div class="finished-goal">
                 <span>${goal.minute ? `${goal.minute}'` : "Gol"}</span>
-                <strong>${escapeHtml(goal.player || "Gol")}</strong>
+                <div class="event-person">
+                  <strong>⚽ ${escapeHtml(goal.player || "Gol")}</strong>
+                  ${goal.assist ? `<small>Assistência: ${escapeHtml(goal.assist)}</small>` : ""}
+                </div>
                 <em>${escapeHtml(goal.team || "")}</em>
+              </div>
+            `).join("")}
+          </div>
+        ` : ""}
+
+        ${cards.length ? `
+          <div class="finished-events-title">Cartões</div>
+          <div class="finished-cards">
+            ${cards.map((card) => `
+              <div class="finished-card">
+                <span>${card.minute ? `${card.minute}'` : ""}</span>
+                <div class="event-person">
+                  <strong>${card.icon} ${escapeHtml(card.player || card.label)}</strong>
+                  <small>${escapeHtml(card.label)}</small>
+                </div>
+                <em>${escapeHtml(card.team || "")}</em>
               </div>
             `).join("")}
           </div>
@@ -717,14 +738,11 @@ function compactGameCard(match) {
 
 function renderLatestVideosSection() {
   const youtube = state.youtube || {};
-  const availableHighlights = Array.isArray(youtube.highlights)
-    ? youtube.highlights
+  const highlights = Array.isArray(youtube.highlights)
+    ? youtube.highlights.slice(0, 3)
     : youtube.highlight
       ? [youtube.highlight]
       : [];
-
-  const finishedMatches = Math.max(1, getFinishedMatchCount());
-  const highlights = availableHighlights.slice(0, finishedMatches);
 
   if (!highlights.length) {
     return `
@@ -735,7 +753,7 @@ function renderLatestVideosSection() {
         </div>
 
         <div class="scorebat-empty">
-          <strong>Nenhum melhores momentos da Copa do Mundo disponível agora.</strong>
+          <strong>Nenhum melhores momentos dos últimos jogos disponível agora.</strong>
           <span>${escapeHtml(youtube.message || "Aguardando publicação no canal da CazéTV.")}</span>
         </div>
       </section>
@@ -746,7 +764,7 @@ function renderLatestVideosSection() {
     <section class="card youtube-section">
       <div class="title-row">
         <h2>🎬 Melhores momentos</h2>
-        <span class="kicker">${highlights.length} vídeo${highlights.length === 1 ? "" : "s"}</span>
+        <span class="kicker">Últimos ${highlights.length}</span>
       </div>
 
       <div class="youtube-title-list">
@@ -754,7 +772,7 @@ function renderLatestVideosSection() {
       </div>
 
       <div class="youtube-auto-note">
-        Somente vídeos da Copa do Mundo FIFA 2026.
+        Um vídeo para cada um dos últimos jogos encerrados.
       </div>
     </section>
   `;
@@ -892,6 +910,7 @@ function renderOfficial() {
     <div class="stack">
       ${renderGroupsSection()}
       ${renderKnockoutSection()}
+      ${renderStatsSection()}
       ${renderSponsorBlock(true)}
     </div>
   `;
@@ -1026,11 +1045,13 @@ function renderKnockoutSection() {
 }
 
 function renderStatsSection() {
+  const source = state.stats.source || 'Football-Data.org';
+
   return `
     <section class="card">
       <div class="title-row">
         <h2>📊 Estatísticas</h2>
-        <span class="kicker">Oficial</span>
+        <span class="kicker">${escapeHtml(source)}</span>
       </div>
 
       <div class="stat-grid">
@@ -1062,11 +1083,15 @@ function statCard(title, rows) {
 
 function liveMatchDetails(match) {
   const goals = liveGoals(match);
+  const cards = matchCards(match);
   const elapsed = formatElapsed(match.elapsed);
-  const hasScore = match.score1 !== null && match.score1 !== undefined && match.score2 !== null && match.score2 !== undefined;
+  const hasScore = match.score1 !== null &&
+    match.score1 !== undefined &&
+    match.score2 !== null &&
+    match.score2 !== undefined;
   const status = liveStatusLabel(match);
 
-  if (!goals.length && !elapsed && !hasScore) {
+  if (!goals.length && !cards.length && !elapsed && !hasScore) {
     return `
       <div class="live-details live-details-clean">
         <div class="live-meta">
@@ -1079,22 +1104,42 @@ function liveMatchDetails(match) {
   }
 
   return `
-    <div class="live-details ${goals.length ? "" : "live-details-clean"}">
+    <div class="live-details ${(goals.length || cards.length) ? "" : "live-details-clean"}">
       <div class="live-meta">
         <span class="live-dot"></span>
         <strong>${elapsed ? `${elapsed} de jogo` : status}</strong>
-        <span>${goals.length ? "Gols confirmados" : "Aguardando eventos"}</span>
+        <span>${goals.length || cards.length ? "Eventos confirmados" : "Aguardando eventos"}</span>
       </div>
-      ${goals.length
-        ? `<div class="goal-list">${goals.map((goal) => `
+
+      ${goals.length ? `
+        <div class="goal-list">
+          ${goals.map((goal) => `
             <div class="goal-item">
               <span>${goal.minute ? `${goal.minute}'` : "Gol"}</span>
-              <strong>${escapeHtml(goal.player || "Gol")}</strong>
+              <div class="event-person">
+                <strong>⚽ ${escapeHtml(goal.player || "Gol")}</strong>
+                ${goal.assist ? `<small>Assistência: ${escapeHtml(goal.assist)}</small>` : ""}
+              </div>
               <em>${escapeHtml(goal.team || "")}</em>
             </div>
-          `).join("")}</div>`
-        : ""
-      }
+          `).join("")}
+        </div>
+      ` : ""}
+
+      ${cards.length ? `
+        <div class="card-event-list">
+          ${cards.map((card) => `
+            <div class="card-event-item">
+              <span>${card.minute ? `${card.minute}'` : ""}</span>
+              <div class="event-person">
+                <strong>${card.icon} ${escapeHtml(card.player || card.label)}</strong>
+                <small>${escapeHtml(card.label)}</small>
+              </div>
+              <em>${escapeHtml(card.team || "")}</em>
+            </div>
+          `).join("")}
+        </div>
+      ` : ""}
     </div>
   `;
 }
@@ -1135,16 +1180,52 @@ function liveGoals(match) {
     .sort((a, b) => Number(a.minute || 999) - Number(b.minute || 999));
 }
 
+
+function matchCards(match) {
+  const events = normalizeGoalList(match.events, "");
+
+  return events
+    .filter((event) => {
+      const type = String(event.type || "").toLowerCase();
+      const card = String(event.card || "").toLowerCase();
+
+      return type.includes("cartão") ||
+        type.includes("cartao") ||
+        type.includes("card") ||
+        card.includes("yellow") ||
+        card.includes("red");
+    })
+    .map((event) => {
+      const type = String(event.type || "");
+      const card = String(event.card || "").toUpperCase();
+      const isRed = card === "RED" ||
+        card === "YELLOW_RED" ||
+        type.toLowerCase().includes("vermelho");
+
+      return Object.assign({}, event, {
+        label: isRed ? "Cartão vermelho" : "Cartão amarelo",
+        icon: isRed ? "🟥" : "🟨"
+      });
+    })
+    .sort((a, b) => Number(a.minute || 999) - Number(b.minute || 999));
+}
+
 function normalizeGoalList(value, team) {
   if (!value) return [];
 
   if (Array.isArray(value)) {
     return value.map((item) => {
       if (typeof item === "string") return parseGoalText(item, team);
+
       return {
-        player: item.player || item.name || item.scorer || item.type || "Gol",
+        type: item.type || "Gol",
+        goalType: item.goalType || "",
+        player: item.player || item.name || item.scorer || "Gol",
+        assist: item.assist || item.assistant || "",
         minute: item.minute || item.time || item.elapsed || "",
-        team: item.team || team || ""
+        injuryTime: item.injuryTime || "",
+        team: item.team || team || "",
+        card: item.card || ""
       };
     }).filter(Boolean);
   }
@@ -1456,7 +1537,12 @@ function rankingTable(ranking) {
         <tbody>
           ${ranking.map((row, index) => `
             <tr>
-              <td class="strong">${index + 1}</td>
+              <td>
+                <div class="rank-position-cell">
+                  <strong>${index + 1}</strong>
+                  ${rankingMovement(row.movement)}
+                </div>
+              </td>
               <td>${row.name}</td>
               <td class="center strong">${row.points}</td>
               <td class="center">${row.exacts}</td>
@@ -1468,21 +1554,99 @@ function rankingTable(ranking) {
   `;
 }
 
+function rankingMovement(movement) {
+  const value = Number(movement || 0);
+
+  if (value > 0) {
+    return `
+      <span
+        class="rank-movement rank-movement-up"
+        title="Subiu ${value} posição${value === 1 ? "" : "ões"}"
+      >
+        ▲${value > 1 ? ` +${value}` : ""}
+      </span>
+    `;
+  }
+
+  if (value < 0) {
+    const amount = Math.abs(value);
+
+    return `
+      <span
+        class="rank-movement rank-movement-down"
+        title="Caiu ${amount} posição${amount === 1 ? "" : "ões"}"
+      >
+        ▼${amount > 1 ? ` -${amount}` : ""}
+      </span>
+    `;
+  }
+
+  return `<span class="rank-movement rank-movement-same" title="Manteve a posição">−</span>`;
+}
+
 function calculateRanking() {
+  const currentRanking = buildRanking();
+  const latestMatch = getLastRankedMatch();
+
+  if (!latestMatch) {
+    return currentRanking.map((row) => Object.assign({}, row, { movement: 0 }));
+  }
+
+  const previousRanking = buildRanking(latestMatch.id);
+  const previousPositions = new Map(
+    previousRanking.map((row, index) => [row.id, index + 1])
+  );
+
+  return currentRanking.map((row, index) => {
+    const currentPosition = index + 1;
+    const previousPosition = previousPositions.get(row.id) || currentPosition;
+
+    return Object.assign({}, row, {
+      movement: previousPosition - currentPosition
+    });
+  });
+}
+
+function buildRanking(excludedMatchId = "") {
   return DATA.players.map((player) => {
     let points = 0;
     let exacts = 0;
     let results = 0;
 
     DATA.matches.forEach((match) => {
+      if (excludedMatchId && match.id === excludedMatchId) {
+        return;
+      }
+
       const scored = scorePick(state.picks[player.id]?.[match.id], match);
       points += scored.points;
       exacts += scored.exact ? 1 : 0;
       results += scored.result ? 1 : 0;
     });
 
-    return { id: player.id, name: player.name, points, exacts, results };
-  }).sort((a, b) => b.points - a.points || b.exacts - a.exacts || a.name.localeCompare(b.name));
+    return {
+      id: player.id,
+      name: player.name,
+      points,
+      exacts,
+      results
+    };
+  }).sort((a, b) => {
+    return b.points - a.points ||
+      b.exacts - a.exacts ||
+      a.name.localeCompare(b.name);
+  });
+}
+
+function getLastRankedMatch() {
+  return DATA.matches
+    .filter((match) => {
+      return match.score1 !== null &&
+        match.score1 !== undefined &&
+        match.score2 !== null &&
+        match.score2 !== undefined;
+    })
+    .sort((a, b) => makeDate(b) - makeDate(a))[0] || null;
 }
 
 function scorePick(pick, match) {

@@ -2137,3 +2137,172 @@ tr:nth-child(even) td {
     font-size: 11px;
   }
 }
+
+
+/* V37 - vídeos selecionados e eventos detalhados */
+.last-match-section {
+  border-top-color: var(--world-red) !important;
+}
+
+.finished-pill {
+  border-color: rgba(255,23,56,.58) !important;
+  background: rgba(255,23,56,.14) !important;
+  color: #ff738a !important;
+  box-shadow: 0 0 16px rgba(255,23,56,.12);
+}
+
+.finished-events-title {
+  margin-top: 9px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  padding-top: 8px;
+  color: #b8c8da;
+  font-size: 9px;
+  font-weight: 1000;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.finished-goals,
+.finished-cards,
+.card-event-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.finished-card,
+.card-event-item {
+  display: grid;
+  grid-template-columns: 38px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid rgba(255,255,255,.06);
+  padding-top: 6px;
+  font-size: 11px;
+}
+
+.finished-card > span,
+.card-event-item > span {
+  color: #b8c8da;
+  font-weight: 1000;
+}
+
+.finished-card em,
+.card-event-item em {
+  color: #9fb1c7;
+  font-style: normal;
+}
+
+.event-person {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.event-person strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-person small {
+  color: #9fb1c7;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.goal-item,
+.finished-goal {
+  grid-template-columns: 38px minmax(0,1fr) auto !important;
+}
+
+@media (max-width: 520px) {
+  .finished-card,
+  .card-event-item,
+  .finished-goal,
+  .goal-item {
+    grid-template-columns: 32px minmax(0,1fr) !important;
+  }
+
+  .finished-card em,
+  .card-event-item em,
+  .finished-goal em,
+  .goal-item em {
+    grid-column: 2;
+  }
+}
+
+
+/* V38 - movimentação do ranking após o último resultado */
+.rank-position-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.rank-position-cell > strong {
+  min-width: 14px;
+  color: #ffffff;
+  font-weight: 1000;
+}
+
+.rank-movement {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  font-size: 10px;
+  font-weight: 1000;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rank-movement-up {
+  color: var(--world-green);
+  text-shadow: 0 0 10px rgba(34,255,74,.28);
+}
+
+.rank-movement-down {
+  color: var(--world-red);
+  text-shadow: 0 0 10px rgba(255,23,56,.28);
+}
+
+.rank-movement-same {
+  color: #7f8da1;
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .rank-position-cell {
+    gap: 4px;
+  }
+
+  .rank-movement {
+    min-width: 14px;
+    font-size: 9px;
+  }
+}
+
+
+/* V39 - estatísticas oficiais e vídeos automáticos */
+.stat-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stat-row > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 620px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
