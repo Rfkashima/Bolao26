@@ -448,30 +448,213 @@ function renderHome() {
 }
 
 function renderLiveSection() {
-  const live = DATA.matches.filter((match) => isLiveMatch(match));
-  const source = currentFootballSourceLabel();
+  const liveMatches = DATA.matches
+    .filter((match) => isLiveMatch(match))
+    .sort((a, b) => makeDate(a) - makeDate(b));
 
-  if (!live.length) {
-    return `
-      <section class="card live-empty-card">
-        <div class="live-empty-line">
-          <h2>🔴 Ao vivo</h2>
-          <span>Nenhum jogo agora</span>
-        </div>
-      </section>
-    `;
+  if (!liveMatches.length) {
+    const lastMatch = getLastFinishedMatch();
+
+    if (!lastMatch) {
+      return `
+        <section class="card live-empty-card">
+          <div class="live-empty-line">
+            <h2>🔴 Ao vivo</h2>
+            <span>Nenhum jogo agora</span>
+          </div>
+        </section>
+      `;
+    }
+
+    return renderLastFinishedMatch(lastMatch);
   }
 
+  const liveVideo = findYouTubeLiveForMatches(liveMatches);
+  const source = currentFootballSourceLabel();
+
   return `
-    <section class="card">
+    <section class="card live-section">
       <div class="title-row">
         <h2>🔴 Ao vivo</h2>
         <span class="live-pill">${escapeHtml(source)}</span>
       </div>
+
       <div class="games-list">
-        ${live.map(gameCard).join("")}
+        ${liveMatches.map(gameCard).join("")}
+      </div>
+
+      ${liveVideo ? renderLiveYouTubeStream(liveVideo) : ""}
+    </section>
+  `;
+}
+
+function getLastFinishedMatch() {
+  const now = new Date();
+
+  return DATA.matches
+    .filter((match) => {
+      const status = String(match.status || "").toLowerCase();
+      const start = makeDate(match);
+
+      return status.includes("final") ||
+        (start < now && !isLiveMatch(match));
+    })
+    .sort((a, b) => makeDate(b) - makeDate(a))[0] || null;
+}
+
+function getFinishedMatchCount() {
+  const now = new Date();
+
+  return DATA.matches.filter((match) => {
+    const status = String(match.status || "").toLowerCase();
+    const start = makeDate(match);
+
+    return status.includes("final") ||
+      (start < now && !isLiveMatch(match));
+  }).length;
+}
+
+function renderLastFinishedMatch(match) {
+  const goals = liveGoals(match);
+
+  return `
+    <section class="card last-match-section">
+      <div class="title-row">
+        <h2>✅ Último jogo</h2>
+        <span class="finished-pill">Jogo encerrado</span>
+      </div>
+
+      <div class="last-match-card">
+        <div class="last-match-meta">
+          <span>${displayRound(match.round)} · Jogo ${match.number}</span>
+          <span>${formatDate(match.date)} · ${match.time}</span>
+        </div>
+
+        <div class="last-match-line">
+          <div class="last-team">${country(match.team1)}</div>
+          <strong class="last-score">${matchResultInline(match)}</strong>
+          <div class="last-team last-team-right">${country(match.team2)}</div>
+        </div>
+
+        ${goals.length ? `
+          <div class="finished-goals">
+            ${goals.map((goal) => `
+              <div class="finished-goal">
+                <span>${goal.minute ? `${goal.minute}'` : "Gol"}</span>
+                <strong>${escapeHtml(goal.player || "Gol")}</strong>
+                <em>${escapeHtml(goal.team || "")}</em>
+              </div>
+            `).join("")}
+          </div>
+        ` : ""}
+
+        <div class="last-match-footer">
+          <span>${escapeHtml(match.venue || "")}</span>
+          <span>${escapeHtml(match.source || currentFootballSourceLabel())}</span>
+        </div>
       </div>
     </section>
+  `;
+}
+
+function findYouTubeLiveForMatches(matches) {
+  const youtube = state.youtube || {};
+  const candidates = [];
+
+  if (youtube.live) {
+    candidates.push(youtube.live);
+  }
+
+  (Array.isArray(youtube.videos) ? youtube.videos : [])
+    .filter((video) => video && video.liveState === "live")
+    .forEach((video) => candidates.push(video));
+
+  return candidates.find((video) => {
+    return matches.some((match) => youtubeVideoMatchesMatch(video, match));
+  }) || null;
+}
+
+function youtubeVideoMatchesMatch(video, match) {
+  const text = normalizeVideoText(
+    `${video && video.title || ""} ${video && video.description || ""}`
+  );
+
+  return videoTextContainsTeam(text, match.team1) &&
+    videoTextContainsTeam(text, match.team2);
+}
+
+function videoTextContainsTeam(text, team) {
+  const aliases = [
+    team,
+    SHORT_COUNTRY_NAMES[team] || "",
+    countryCode(team)
+  ];
+
+  const extras = {
+    "Estados Unidos": ["EUA", "USA", "United States"],
+    "República Tcheca": ["Rep Tcheca", "Tchéquia", "Czechia"],
+    "África do Sul": ["Africa do Sul", "South Africa"],
+    "Coreia do Sul": ["Coreia Sul", "South Korea"],
+    "Costa do Marfim": ["Costa Marfim", "Ivory Coast"],
+    "Arábia Saudita": ["Arabia Saudita", "Saudi Arabia"],
+    "Nova Zelândia": ["Nova Zelandia", "New Zealand"],
+    "RD Congo": ["Congo DR", "República Democrática do Congo"],
+    "Curaçao": ["Curacao"]
+  };
+
+  return aliases
+    .concat(extras[team] || [])
+    .map(normalizeVideoText)
+    .filter((alias) => alias.length >= 3)
+    .some((alias) => text.includes(alias));
+}
+
+function normalizeVideoText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function renderLiveYouTubeStream(video) {
+  if (!video.embeddable) {
+    return `
+      <div class="live-stream-block">
+        <div class="live-stream-title">
+          <strong>📺 Transmissão CazéTV</strong>
+          <span>Ao vivo</span>
+        </div>
+        <a class="live-stream-open" href="${video.url}" target="_blank" rel="noopener noreferrer">
+          Assistir à transmissão no YouTube
+        </a>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="live-stream-block">
+      <div class="live-stream-title">
+        <strong>📺 Transmissão CazéTV</strong>
+        <span>Ao vivo</span>
+      </div>
+
+      <div class="youtube-embed live-youtube-embed">
+        <iframe
+          src="${video.embedUrl}"
+          title="${escapeHtml(video.title || "Transmissão CazéTV")}"
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+        ></iframe>
+      </div>
+
+      <a class="live-stream-open" href="${video.url}" target="_blank" rel="noopener noreferrer">
+        Abrir no YouTube
+      </a>
+    </div>
   `;
 }
 
@@ -534,56 +717,61 @@ function compactGameCard(match) {
 
 function renderLatestVideosSection() {
   const youtube = state.youtube || {};
-  const live = youtube.live || null;
-  const upcoming = youtube.upcoming || null;
-  const highlight = youtube.highlight || null;
-  const featured = live || upcoming || null;
+  const availableHighlights = Array.isArray(youtube.highlights)
+    ? youtube.highlights
+    : youtube.highlight
+      ? [youtube.highlight]
+      : [];
 
-  if (youtube.enabled && (featured || highlight)) {
+  const finishedMatches = Math.max(1, getFinishedMatchCount());
+  const highlights = availableHighlights.slice(0, finishedMatches);
+
+  if (!highlights.length) {
     return `
-      <section class="card youtube-section">
+      <section class="card video-status-card">
         <div class="title-row">
-          <h2>📺 CazéTV</h2>
-          <span class="kicker">${live ? "Ao vivo" : upcoming ? "Próxima live" : "Melhores momentos"}</span>
+          <h2>🎬 Melhores momentos</h2>
+          <span class="kicker">CazéTV</span>
         </div>
 
-        <div class="youtube-grid ${featured && highlight ? "two-items" : ""}">
-          ${featured ? youtubeFeaturedCard(featured) : ""}
-          ${highlight && (!featured || highlight.id !== featured.id) ? youtubeHighlightCard(highlight) : ""}
+        <div class="scorebat-empty">
+          <strong>Nenhum melhores momentos da Copa do Mundo disponível agora.</strong>
+          <span>${escapeHtml(youtube.message || "Aguardando publicação no canal da CazéTV.")}</span>
         </div>
-
-        <div class="youtube-auto-note">
-          Atualização automática pelo canal ${escapeHtml(youtube.channelTitle || "CazéTV")}.
-        </div>
-      </section>
-    `;
-  }
-
-  const scorebatVideos = Array.isArray(state.videos) ? state.videos.slice(0, 3) : [];
-
-  if (scorebatVideos.length) {
-    return `
-      <section class="card">
-        <div class="title-row">
-          <h2>🎥 Últimos vídeos</h2>
-          <span class="kicker">ScoreBat</span>
-        </div>
-        <div class="video-carousel">${scorebatVideos.map(videoCard).join("")}</div>
       </section>
     `;
   }
 
   return `
-    <section class="card video-status-card">
+    <section class="card youtube-section">
       <div class="title-row">
-        <h2>📺 Vídeos</h2>
-        <span class="kicker">CazéTV</span>
+        <h2>🎬 Melhores momentos</h2>
+        <span class="kicker">${highlights.length} vídeo${highlights.length === 1 ? "" : "s"}</span>
       </div>
-      <div class="scorebat-empty">
-        <strong>Nenhuma live ou melhores momentos encontrados agora.</strong>
-        <span>${escapeHtml(youtube.message || "Configure a API do YouTube para busca automática.")}</span>
+
+      <div class="youtube-title-list">
+        ${highlights.map((video, index) => youtubeTitleRow(video, index)).join("")}
+      </div>
+
+      <div class="youtube-auto-note">
+        Somente vídeos da Copa do Mundo FIFA 2026.
       </div>
     </section>
+  `;
+}
+
+function youtubeTitleRow(video, index) {
+  return `
+    <a
+      class="youtube-title-row"
+      href="${video.url}"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <span>${index + 1}</span>
+      <strong>${escapeHtml(video.title || "Melhores momentos")}</strong>
+      <em>▶</em>
+    </a>
   `;
 }
 
