@@ -97,6 +97,22 @@ const FLAGS = {
   "Panamá": "🇵🇦"
 };
 
+
+const KNOWN_CAZETV_HIGHLIGHTS = [
+  {
+    id: 'KjQtpF_X5Uw',
+    matchId: 'J002',
+    title: 'MELHORES MOMENTOS: COREIA DO SUL 2 X 1 TCHÉQUIA | COPA DO MUNDO FIFA™ 2026 | 1ª RODADA',
+    url: 'https://www.youtube.com/watch?v=KjQtpF_X5Uw'
+  },
+  {
+    id: 'LPp92M0dRAA',
+    matchId: 'J001',
+    title: 'HIGHLIGHTS: MEXICO 2 X 0 SOUTH AFRICA | FIFA WORLD CUP™ 2026 | ROUND 1',
+    url: 'https://www.youtube.com/watch?v=LPp92M0dRAA'
+  }
+];
+
 const FLAG_SVG_CODES = {
   "Escócia": "1f3f4-e0067-e0062-e0073-e0063-e0074-e007f",
   "Inglaterra": "1f3f4-e0067-e0062-e0065-e006e-e0067-e007f"
@@ -536,7 +552,7 @@ function findYouTubeLiveForMatch(match) {
 
   const exact = mapped.find((item) => {
     return item &&
-      String(item.matchId || "") === String(match.id || "") &&
+      String(item.matchId || '') === String(match.id || '') &&
       item.video;
   });
 
@@ -548,7 +564,12 @@ function findYouTubeLiveForMatch(match) {
     return youtube.live;
   }
 
-  return null;
+  return {
+    id: 'cazetv-live',
+    title: `${match.team1} x ${match.team2} na CazéTV`,
+    url: 'https://www.youtube.com/@CazeTV/live',
+    liveState: 'live'
+  };
 }
 
 function getLastFinishedMatch() {
@@ -579,7 +600,6 @@ function getFinishedMatchCount() {
 
 function renderLastFinishedMatch(match) {
   const goals = liveGoals(match);
-  const cards = matchCards(match);
 
   return `
     <section class="card last-match-section">
@@ -605,35 +625,19 @@ function renderLastFinishedMatch(match) {
           <div class="finished-goals">
             ${goals.map((goal) => `
               <div class="finished-goal">
-                <span>${goal.minute ? `${goal.minute}'` : "Gol"}</span>
+                <span>${goal.minute ? `${goal.minute}'` : 'Gol'}</span>
                 <div class="event-person">
-                  <strong>⚽ ${escapeHtml(goal.player || "Gol")}</strong>
-                  ${goal.assist ? `<small>Assistência: ${escapeHtml(goal.assist)}</small>` : ""}
+                  <strong>⚽ ${escapeHtml(goal.player || 'Gol')}</strong>
+                  ${goal.assist ? `<small>Assistência: ${escapeHtml(goal.assist)}</small>` : ''}
                 </div>
-                <em>${escapeHtml(goal.team || "")}</em>
+                <em>${escapeHtml(goal.team || '')}</em>
               </div>
-            `).join("")}
+            `).join('')}
           </div>
-        ` : ""}
-
-        ${cards.length ? `
-          <div class="finished-events-title">Cartões</div>
-          <div class="finished-cards">
-            ${cards.map((card) => `
-              <div class="finished-card">
-                <span>${card.minute ? `${card.minute}'` : ""}</span>
-                <div class="event-person">
-                  <strong>${card.icon} ${escapeHtml(card.player || card.label)}</strong>
-                  <small>${escapeHtml(card.label)}</small>
-                </div>
-                <em>${escapeHtml(card.team || "")}</em>
-              </div>
-            `).join("")}
-          </div>
-        ` : ""}
+        ` : ''}
 
         <div class="last-match-footer">
-          <span>${escapeHtml(match.venue || "")}</span>
+          <span>${escapeHtml(match.venue || '')}</span>
           <span>${escapeHtml(match.source || currentFootballSourceLabel())}</span>
         </div>
       </div>
@@ -777,27 +781,12 @@ function compactGameCard(match) {
 
 function renderLatestVideosSection() {
   const youtube = state.youtube || {};
-  const highlights = Array.isArray(youtube.highlights)
-    ? youtube.highlights.slice(0, 3)
+  const backendHighlights = Array.isArray(youtube.highlights)
+    ? youtube.highlights
     : youtube.highlight
       ? [youtube.highlight]
       : [];
-
-  if (!highlights.length) {
-    return `
-      <section class="card video-status-card">
-        <div class="title-row">
-          <h2>🎬 Melhores momentos</h2>
-          <span class="kicker">CazéTV</span>
-        </div>
-
-        <div class="scorebat-empty">
-          <strong>Nenhum melhores momentos dos últimos jogos disponível agora.</strong>
-          <span>${escapeHtml(youtube.message || "Aguardando publicação no canal da CazéTV.")}</span>
-        </div>
-      </section>
-    `;
-  }
+  const highlights = mergeKnownHighlightVideos(backendHighlights).slice(0, 3);
 
   return `
     <section class="card youtube-section">
@@ -807,7 +796,7 @@ function renderLatestVideosSection() {
       </div>
 
       <div class="youtube-title-list">
-        ${highlights.map((video, index) => youtubeTitleRow(video, index)).join("")}
+        ${highlights.map((video, index) => youtubeTitleRow(video, index)).join('')}
       </div>
 
       <div class="youtube-auto-note">
@@ -815,6 +804,29 @@ function renderLatestVideosSection() {
       </div>
     </section>
   `;
+}
+
+function mergeKnownHighlightVideos(videos) {
+  const result = [];
+  const ids = new Set();
+  const matches = new Set();
+
+  KNOWN_CAZETV_HIGHLIGHTS.forEach((video) => {
+    ids.add(video.id);
+    matches.add(video.matchId);
+    result.push(video);
+  });
+
+  (Array.isArray(videos) ? videos : []).forEach((video) => {
+    if (!video || !video.id || ids.has(video.id)) return;
+    if (video.matchId && matches.has(video.matchId)) return;
+
+    ids.add(video.id);
+    if (video.matchId) matches.add(video.matchId);
+    result.push(video);
+  });
+
+  return result;
 }
 
 function youtubeTitleRow(video, index) {
@@ -1094,10 +1106,8 @@ function renderStatsSection() {
       </div>
 
       <div class="stat-grid">
-        ${statCard("⚽ Artilharia", state.stats.scorers || state.stats.artilharia || [])}
-        ${statCard("🅰️ Assistências", state.stats.assists || state.stats.assistencias || [])}
-        ${statCard("🟨 Amarelos", state.stats.yellowCards || state.stats.amarelos || [])}
-        ${statCard("🟥 Vermelhos", state.stats.redCards || state.stats.vermelhos || [])}
+        ${statCard('⚽ Artilharia', state.stats.scorers || state.stats.artilharia || [])}
+        ${statCard('🅰️ Assistências', state.stats.assists || state.stats.assistencias || [])}
       </div>
     </section>
   `;
@@ -1136,28 +1146,20 @@ function statCard(title, rows) {
 }
 
 function liveMatchDetails(match) {
-  const goals = liveGoals(match).map((event) => Object.assign({}, event, {
-    kind: "goal",
-    icon: "⚽"
-  }));
-  const cards = matchCards(match).map((event) => Object.assign({}, event, {
-    kind: "card"
-  }));
-  const substitutions = matchSubstitutions(match).map((event) => Object.assign({}, event, {
-    kind: "substitution"
-  }));
-  const events = goals
-    .concat(cards)
-    .concat(substitutions)
-    .sort((a, b) => Number(a.minute || 999) - Number(b.minute || 999));
+  const goals = liveGoals(match);
 
-  if (!events.length) {
-    return "";
+  if (!goals.length) {
+    return '';
   }
 
   return `
     <div class="live-event-list">
-      ${events.map((event) => liveEventRow(event, match)).join("")}
+      ${goals.map((event) => {
+        return liveEventRow(Object.assign({}, event, {
+          kind: 'goal',
+          icon: '⚽'
+        }), match);
+      }).join('')}
     </div>
   `;
 }
@@ -1272,10 +1274,43 @@ function getLiveClock(match) {
 
   const official = formatElapsed(match.elapsed);
 
+  if (official) {
+    return {
+      label: official,
+      approximate: false
+    };
+  }
+
   return {
-    label: official,
-    approximate: false
+    label: calculateScheduledLiveClock(match),
+    approximate: true
   };
+}
+
+function calculateScheduledLiveClock(match, nowValue) {
+  const start = makeDate(match);
+  const now = nowValue instanceof Date ? nowValue : new Date();
+  const elapsedMinutes = Math.floor(
+    (now.getTime() - start.getTime()) / 60000
+  );
+
+  if (!Number.isFinite(elapsedMinutes) || elapsedMinutes < 0) {
+    return '';
+  }
+
+  if (elapsedMinutes < 45) {
+    return `${Math.max(1, elapsedMinutes + 1)}'`;
+  }
+
+  if (elapsedMinutes < 60) {
+    return 'INTERVALO';
+  }
+
+  if (elapsedMinutes <= 105) {
+    return `${Math.min(90, elapsedMinutes - 14)}'`;
+  }
+
+  return "90+'";
 }
 
 function liveStatusLabel(match) {
@@ -1291,29 +1326,54 @@ function liveStatusLabel(match) {
 function liveGoals(match) {
   const home = normalizeGoalList(match.homeScorers, match.team1);
   const away = normalizeGoalList(match.awayScorers, match.team2);
-  const events = normalizeGoalList(match.events, "");
-
+  const events = normalizeGoalList(match.events, '');
   const merged = home.concat(away);
 
   events.forEach((event) => {
-    const type = String(event.type || "").toLowerCase();
-    if (type.includes("gol") || type.includes("goal")) {
+    const type = String(event.type || '').toLowerCase();
+
+    if (type.includes('gol') || type.includes('goal')) {
       merged.push(event);
     }
   });
 
   const seen = new Set();
+  const goals = merged.filter((goal) => {
+    const key = `${goal.player || ''}|${goal.minute || ''}|${goal.team || ''}`;
 
-  return merged
-    .filter((goal) => {
-      const key = `${goal.player || ""}|${goal.minute || ""}|${goal.team || ""}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return goal.player || goal.minute;
-    })
-    .sort((a, b) => Number(a.minute || 999) - Number(b.minute || 999));
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return goal.player || goal.minute;
+  });
+
+  appendMissingScoreGoals(goals, match, 'home');
+  appendMissingScoreGoals(goals, match, 'away');
+
+  return goals.sort((a, b) => {
+    return Number(a.minute || 999) - Number(b.minute || 999);
+  });
 }
 
+function appendMissingScoreGoals(goals, match, side) {
+  const targetScore = Math.max(
+    0,
+    Number(side === 'home' ? match.score1 : match.score2) || 0
+  );
+  const team = side === 'home' ? match.team1 : match.team2;
+  const known = goals.filter((goal) => {
+    return eventTeamSide(goal.team, match) === side;
+  }).length;
+
+  for (let index = known; index < targetScore; index++) {
+    goals.push({
+      type: 'Gol',
+      player: `Gol do ${team}`,
+      minute: '',
+      team,
+      generic: true
+    });
+  }
+}
 
 function matchSubstitutions(match) {
   return normalizeGoalList(match.events, "")
