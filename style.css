@@ -2471,28 +2471,23 @@ tr:nth-child(even) td {
 }
 
 
-/* V48 - placar ao vivo limpo, eventos por lado e estatísticas */
-.live-title-row {
+/* V49 - correção consolidada sem novas fontes */
+.live-section .title-row {
   margin-bottom: 6px;
 }
 
 .live-scoreboard {
   display: grid;
-  grid-template-columns:
-    minmax(120px, 1fr)
-    42px
-    58px
-    42px
-    minmax(120px, 1fr);
+  grid-template-columns: minmax(120px, 1fr) 38px 64px 38px minmax(120px, 1fr);
   align-items: center;
   gap: 8px;
-  min-height: 74px;
+  min-height: 72px;
   padding: 8px 4px;
 }
 
 .live-score-team {
   min-width: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 1000;
 }
 
@@ -2502,26 +2497,26 @@ tr:nth-child(even) td {
   gap: 7px;
 }
 
-.live-score-team-home {
+.live-score-home {
   text-align: right;
 }
 
-.live-score-team-home .country {
+.live-score-home .country {
   justify-content: flex-end;
 }
 
-.live-score-team-away {
+.live-score-away {
   text-align: left;
 }
 
-.live-score-team-away .country {
+.live-score-away .country {
   justify-content: flex-start;
 }
 
 .live-score-number {
   color: #ffffff;
   text-align: center;
-  font-size: 28px;
+  font-size: 27px;
   font-weight: 1000;
   line-height: 1;
 }
@@ -2530,25 +2525,40 @@ tr:nth-child(even) td {
   min-height: 22px;
   color: #ffffff;
   text-align: center;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 1000;
   white-space: nowrap;
+}
+
+.live-youtube-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  border: 1px solid rgba(255,23,56,.34);
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: rgba(255,23,56,.07);
+  color: #8edbff;
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 950;
 }
 
 .live-event-list {
   display: grid;
   gap: 5px;
-  margin-top: 4px;
+  margin-top: 8px;
   border-top: 1px solid rgba(255,255,255,.08);
   padding-top: 7px;
 }
 
 .live-event-row {
   display: grid;
-  grid-template-columns: minmax(0,1fr) 48px minmax(0,1fr);
+  grid-template-columns: minmax(0,1fr) 44px minmax(0,1fr);
   align-items: center;
-  min-height: 34px;
   gap: 8px;
+  min-height: 34px;
 }
 
 .live-event-home {
@@ -2562,7 +2572,7 @@ tr:nth-child(even) td {
 }
 
 .live-event-minute {
-  color: #b9c6d8;
+  color: #aebed2;
   text-align: center;
   font-size: 10px;
   font-weight: 1000;
@@ -2589,27 +2599,6 @@ tr:nth-child(even) td {
   font-weight: 800;
 }
 
-.live-youtube-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  margin-top: 8px;
-  border: 1px solid rgba(255,23,56,.38);
-  border-radius: 10px;
-  padding: 9px 12px;
-  background: rgba(255,23,56,.08);
-  color: #ffffff;
-  text-decoration: none;
-  font-size: 11px;
-  font-weight: 950;
-}
-
-.live-youtube-link em {
-  color: #ff6a82;
-  font-style: normal;
-}
-
 .stat-row {
   display: flex;
   align-items: center;
@@ -2626,23 +2615,18 @@ tr:nth-child(even) td {
   text-align: left;
 }
 
-.stat-player-side > strong {
+.stat-player-side .flag-img {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 13px;
+}
+
+.stat-player-side strong {
   min-width: 0;
   overflow: hidden;
   color: #ffffff;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.stat-country-flag {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-}
-
-.stat-country-flag .flag-img {
-  width: 18px;
-  height: 13px;
 }
 
 .stat-quantity {
@@ -2656,18 +2640,13 @@ tr:nth-child(even) td {
 
 .stat-empty {
   margin-top: 7px;
-  font-size: 12px !important;
   text-align: left;
+  font-size: 12px !important;
 }
 
 @media (max-width: 640px) {
   .live-scoreboard {
-    grid-template-columns:
-      minmax(78px, 1fr)
-      28px
-      46px
-      28px
-      minmax(78px, 1fr);
+    grid-template-columns: minmax(76px, 1fr) 26px 52px 26px minmax(76px, 1fr);
     gap: 4px;
     min-height: 62px;
   }
@@ -2685,11 +2664,11 @@ tr:nth-child(even) td {
   }
 
   .live-score-clock {
-    font-size: 11px;
+    font-size: 10px;
   }
 
   .live-event-row {
-    grid-template-columns: minmax(0,1fr) 38px minmax(0,1fr);
+    grid-template-columns: minmax(0,1fr) 36px minmax(0,1fr);
     gap: 5px;
   }
 

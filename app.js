@@ -470,7 +470,7 @@ function renderLiveSection() {
 
   return `
     <section class="card live-section">
-      <div class="title-row live-title-row">
+      <div class="title-row">
         <h2>🔴 Ao vivo</h2>
       </div>
 
@@ -492,8 +492,8 @@ function liveGameCard(match) {
       </div>
 
       ${liveMatchLine(match)}
-      ${liveMatchDetails(match)}
       ${liveVideo ? renderLiveYouTubeStream(liveVideo) : ""}
+      ${liveMatchDetails(match)}
 
       <div class="muted live-venue">${escapeHtml(match.venue || "")}</div>
     </div>
@@ -502,30 +502,26 @@ function liveGameCard(match) {
 
 function liveMatchLine(match) {
   const clock = getLiveClock(match);
-  const homeScore = match.score1 === null ||
-    match.score1 === undefined
-      ? "0"
-      : String(match.score1);
-  const awayScore = match.score2 === null ||
-    match.score2 === undefined
-      ? "0"
-      : String(match.score2);
+  const homeScore = match.score1 === null || match.score1 === undefined
+    ? "0"
+    : String(match.score1);
+  const awayScore = match.score2 === null || match.score2 === undefined
+    ? "0"
+    : String(match.score2);
 
   return `
     <div class="live-scoreboard">
-      <div class="live-score-team live-score-team-home">
+      <div class="live-score-team live-score-home">
         ${country(match.team1)}
       </div>
 
       <strong class="live-score-number">${homeScore}</strong>
 
-      <div class="live-score-clock">
-        ${clock.label ? escapeHtml(clock.label) : ""}
-      </div>
+      <div class="live-score-clock">${escapeHtml(clock.label)}</div>
 
       <strong class="live-score-number">${awayScore}</strong>
 
-      <div class="live-score-team live-score-team-away">
+      <div class="live-score-team live-score-away">
         ${country(match.team2)}
       </div>
     </div>
@@ -716,9 +712,7 @@ function renderLiveYouTubeStream(video) {
       target="_blank"
       rel="noopener noreferrer"
     >
-      <span>📺</span>
-      <strong>Assistir na CazéTV</strong>
-      <em>↗</em>
+      ▶ Assistir na CazéTV
     </a>
   `;
 }
@@ -1120,25 +1114,15 @@ function statCard(title, rows) {
 
       ${cleanRows.length
         ? cleanRows.map((row) => {
-            const player = escapeHtml(
-              row.player ||
-              row.nome ||
-              "-"
-            );
+            const player = escapeHtml(row.player || row.nome || "-");
             const team = String(row.team || "");
-            const total = row.total ??
-              row.value ??
-              row.qtd ??
-              0;
+            const total = row.total ?? row.value ?? row.qtd ?? 0;
 
             return `
               <div class="stat-row">
                 <div class="stat-player-side">
+                  ${team ? flagMarkup(team) : ""}
                   <strong>${player}</strong>
-                  ${team
-                    ? `<span class="stat-country-flag" title="${escapeHtml(team)}">${flagMarkup(team)}</span>`
-                    : ""
-                  }
                 </div>
 
                 <strong class="stat-quantity">${total}</strong>
@@ -1152,22 +1136,20 @@ function statCard(title, rows) {
 }
 
 function liveMatchDetails(match) {
-  const goals = liveGoals(match);
-  const cards = matchCards(match);
+  const goals = liveGoals(match).map((event) => Object.assign({}, event, {
+    kind: "goal",
+    icon: "⚽"
+  }));
+  const cards = matchCards(match).map((event) => Object.assign({}, event, {
+    kind: "card"
+  }));
+  const substitutions = matchSubstitutions(match).map((event) => Object.assign({}, event, {
+    kind: "substitution"
+  }));
   const events = goals
-    .map((event) => Object.assign({}, event, {
-      eventKind: "goal",
-      icon: "⚽"
-    }))
-    .concat(
-      cards.map((event) => Object.assign({}, event, {
-        eventKind: "card"
-      }))
-    )
-    .sort((a, b) => {
-      return Number(a.minute || 999) -
-        Number(b.minute || 999);
-    });
+    .concat(cards)
+    .concat(substitutions)
+    .sort((a, b) => Number(a.minute || 999) - Number(b.minute || 999));
 
   if (!events.length) {
     return "";
@@ -1175,78 +1157,96 @@ function liveMatchDetails(match) {
 
   return `
     <div class="live-event-list">
-      ${events.map((event) => {
-        return liveEventRow(event, match);
-      }).join("")}
+      ${events.map((event) => liveEventRow(event, match)).join("")}
     </div>
   `;
 }
 
 function liveEventRow(event, match) {
   const side = eventTeamSide(event.team, match);
-  const icon = event.eventKind === "goal"
-    ? "⚽"
-    : event.icon || "🟨";
-  const player = escapeHtml(
-    event.player ||
-    event.label ||
-    ""
-  );
-  const assist = event.assist
-    ? `<small>Assistência: ${escapeHtml(event.assist)}</small>`
-    : "";
   const minute = event.minute
     ? `${escapeHtml(String(event.minute))}'`
     : "";
+  let content = "";
 
-  const content = `
-    <div class="live-event-person">
-      <strong>${icon} ${player}</strong>
-      ${assist}
-    </div>
-  `;
+  if (event.kind === "substitution") {
+    content = `
+      <div class="live-event-person">
+        <strong>🔄 ${escapeHtml(event.playerIn || event.player || "")}</strong>
+        <small>Saiu: ${escapeHtml(event.playerOut || "")}</small>
+      </div>
+    `;
+  } else {
+    content = `
+      <div class="live-event-person">
+        <strong>${event.icon || ""} ${escapeHtml(event.player || event.label || "")}</strong>
+        ${event.assist
+          ? `<small>Assistência: ${escapeHtml(event.assist)}</small>`
+          : event.label && event.kind === "card"
+            ? `<small>${escapeHtml(event.label)}</small>`
+            : ""
+        }
+      </div>
+    `;
+  }
 
   return `
     <div class="live-event-row live-event-${side}">
-      <div class="live-event-home">
-        ${side === "home" ? content : ""}
-      </div>
-
+      <div class="live-event-home">${side === "home" ? content : ""}</div>
       <span class="live-event-minute">${minute}</span>
-
-      <div class="live-event-away">
-        ${side === "away" ? content : ""}
-      </div>
+      <div class="live-event-away">${side === "away" ? content : ""}</div>
     </div>
   `;
 }
 
 function eventTeamSide(team, match) {
-  const normalizedTeam = normalizeEventTeamName(team);
-  const home = normalizeEventTeamName(match.team1);
-  const away = normalizeEventTeamName(match.team2);
+  const eventName = normalizeEventTeamName(team);
+
+  if (!eventName) {
+    return 'home';
+  }
+
+  const homeAliases = eventTeamAliases(match.team1);
+  const awayAliases = eventTeamAliases(match.team2);
 
   if (
-    normalizedTeam === away ||
-    (
-      normalizedTeam.includes("bosnia") &&
-      away.includes("bosnia")
-    )
+    awayAliases.some((alias) => {
+      return eventName === alias ||
+        eventName.includes(alias) ||
+        alias.includes(eventName);
+    })
   ) {
-    return "away";
+    return 'away';
   }
 
   if (
-    normalizedTeam === home ||
-    (
-      normalizedTeam.includes("canada") &&
-      home.includes("canada")
-    )
+    homeAliases.some((alias) => {
+      return eventName === alias ||
+        eventName.includes(alias) ||
+        alias.includes(eventName);
+    })
   ) {
-    return "home";
+    return 'home';
   }
 
-  return "home";
+  return 'home';
+}
+
+function eventTeamAliases(team) {
+  const extras = {
+    "Bósnia": ["bosnia", "bosniaeherzegovina", "bosniaandherzegovina"],
+    "República Tcheca": ["republicatcheca", "tchequia", "czechia", "czechrepublic"],
+    "Coreia do Sul": ["coreiadosul", "southkorea", "korearepublic"],
+    "África do Sul": ["africadosul", "southafrica"],
+    "Estados Unidos": ["estadosunidos", "usa", "unitedstates"],
+    "Costa do Marfim": ["costadomarfim", "ivorycoast", "cotedivoire"],
+    "RD Congo": ["rdcongo", "congodr", "democraticrepublicofthecongo"]
+  };
+
+  return [team]
+    .concat(extras[team] || [])
+    .map(normalizeEventTeamName)
+    .filter(Boolean);
 }
 
 function normalizeEventTeamName(value) {
@@ -1254,20 +1254,23 @@ function normalizeEventTeamName(value) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9]/g, "")
-    .toLowerCase()
-    .replace("bosniaandherzegovina", "bosnia")
-    .replace("bosniaherzegovina", "bosnia");
+    .toLowerCase();
 }
 
 function getLiveClock(match) {
-  const official = formatElapsed(match.elapsed);
+  const sourceStatus = String(match.sourceStatus || '').toUpperCase();
 
-  if (!official) {
+  if (
+    sourceStatus === 'PAUSED' ||
+    String(match.elapsed || '').toUpperCase() === 'INTERVALO'
+  ) {
     return {
-      label: "",
+      label: 'INTERVALO',
       approximate: false
     };
   }
+
+  const official = formatElapsed(match.elapsed);
 
   return {
     label: official,
@@ -1312,6 +1315,21 @@ function liveGoals(match) {
 }
 
 
+function matchSubstitutions(match) {
+  return normalizeGoalList(match.events, "")
+    .filter((event) => {
+      const type = String(event.type || "").toLowerCase();
+      return type.includes("substituição") ||
+        type.includes("substituicao") ||
+        type.includes("substitution");
+    })
+    .map((event) => Object.assign({}, event, {
+      label: "Substituição",
+      icon: "🔄"
+    }))
+    .sort((a, b) => Number(a.minute || 999) - Number(b.minute || 999));
+}
+
 function matchCards(match) {
   const events = normalizeGoalList(match.events, "");
 
@@ -1346,12 +1364,16 @@ function normalizeGoalList(value, team) {
 
   if (Array.isArray(value)) {
     return value.map((item) => {
-      if (typeof item === "string") return parseGoalText(item, team);
+      if (typeof item === "string") {
+        return parseGoalText(item, team);
+      }
 
       return {
         type: item.type || "Gol",
         goalType: item.goalType || "",
-        player: item.player || item.name || item.scorer || "Gol",
+        player: item.player || item.name || item.scorer || "",
+        playerIn: item.playerIn || "",
+        playerOut: item.playerOut || "",
         assist: item.assist || item.assistant || "",
         minute: item.minute || item.time || item.elapsed || "",
         injuryTime: item.injuryTime || "",
@@ -1363,10 +1385,12 @@ function normalizeGoalList(value, team) {
 
   if (typeof value === "string") {
     try {
-      const parsed = JSON.parse(value);
-      return normalizeGoalList(parsed, team);
+      return normalizeGoalList(JSON.parse(value), team);
     } catch (_) {
-      return value.split(/[,;|]/).map((item) => parseGoalText(item, team)).filter(Boolean);
+      return value
+        .split(/[,;|]/)
+        .map((item) => parseGoalText(item, team))
+        .filter(Boolean);
     }
   }
 
@@ -1401,20 +1425,14 @@ function formatElapsed(value) {
     return "";
   }
 
-  if (/^\d{1,3}\+\d{1,2}$/.test(raw)) {
-    return `${raw}'`;
-  }
-
-  if (/^\d{1,3}$/.test(raw)) {
-    return `${raw}'`;
+  if (/^\d{1,3}(?:\+\d{1,2})?$/.test(raw.replace(/['’]/g, ""))) {
+    return `${raw.replace(/['’]/g, "")}'`;
   }
 
   if (
     normalized === "INTERVALO" ||
     normalized === "PRORROGAÇÃO" ||
-    normalized === "PÊNALTIS" ||
-    normalized === "1º TEMPO" ||
-    normalized === "2º TEMPO"
+    normalized === "PÊNALTIS"
   ) {
     return normalized;
   }
