@@ -469,7 +469,6 @@ function renderLiveSection() {
     return renderLastFinishedMatch(lastMatch);
   }
 
-  const liveVideo = findYouTubeLiveForMatches(liveMatches);
   const source = currentFootballSourceLabel();
 
   return `
@@ -480,12 +479,52 @@ function renderLiveSection() {
       </div>
 
       <div class="games-list">
-        ${liveMatches.map(gameCard).join("")}
+        ${liveMatches.map(liveGameCard).join("")}
       </div>
-
-      ${liveVideo ? renderLiveYouTubeStream(liveVideo) : ""}
     </section>
   `;
+}
+
+function liveGameCard(match) {
+  const liveVideo = findYouTubeLiveForMatch(match);
+
+  return `
+    <div class="game-card live-game-card">
+      <div class="game-top">
+        <span>${displayRound(match.round)} · Jogo ${match.number}</span>
+        <span>${formatDate(match.date)} · ${match.time}</span>
+      </div>
+
+      ${matchLine(match)}
+      ${liveMatchDetails(match)}
+      ${liveVideo ? renderLiveYouTubeStream(liveVideo) : ""}
+
+      <div class="muted live-venue">${escapeHtml(match.venue || "")}</div>
+    </div>
+  `;
+}
+
+function findYouTubeLiveForMatch(match) {
+  const youtube = state.youtube || {};
+  const mapped = Array.isArray(youtube.liveVideos)
+    ? youtube.liveVideos
+    : [];
+
+  const exact = mapped.find((item) => {
+    return item &&
+      String(item.matchId || "") === String(match.id || "") &&
+      item.video;
+  });
+
+  if (exact) {
+    return exact.video;
+  }
+
+  if (youtube.live && youtubeVideoMatchesMatch(youtube.live, match)) {
+    return youtube.live;
+  }
+
+  return null;
 }
 
 function getLastFinishedMatch() {
@@ -1144,31 +1183,14 @@ function statCard(title, rows) {
 function liveMatchDetails(match) {
   const goals = liveGoals(match);
   const cards = matchCards(match);
-  const elapsed = formatElapsed(match.elapsed);
-  const hasScore = match.score1 !== null &&
-    match.score1 !== undefined &&
-    match.score2 !== null &&
-    match.score2 !== undefined;
-  const status = liveStatusLabel(match);
-
-  if (!goals.length && !cards.length && !elapsed && !hasScore) {
-    return `
-      <div class="live-details live-details-clean">
-        <div class="live-meta">
-          <span class="live-dot"></span>
-          <strong>Em andamento</strong>
-          <span>Aguardando atualização da API</span>
-        </div>
-      </div>
-    `;
-  }
+  const clock = getLiveClock(match);
 
   return `
     <div class="live-details ${(goals.length || cards.length) ? "" : "live-details-clean"}">
       <div class="live-meta">
         <span class="live-dot"></span>
-        <strong>${elapsed ? `${elapsed} de jogo` : status}</strong>
-        <span>${goals.length || cards.length ? "Eventos confirmados" : "Aguardando eventos"}</span>
+        <strong>${escapeHtml(clock.label)}</strong>
+        <span>${clock.approximate ? "Minuto aproximado pelo horário" : "Atualização da API"}</span>
       </div>
 
       ${goals.length ? `
@@ -1202,6 +1224,52 @@ function liveMatchDetails(match) {
       ` : ""}
     </div>
   `;
+}
+
+function getLiveClock(match) {
+  const official = formatElapsed(match.elapsed);
+
+  if (official) {
+    return {
+      label: `${official} de jogo`,
+      approximate: false
+    };
+  }
+
+  const start = makeDate(match);
+  const now = new Date();
+  const totalMinutes = Math.max(
+    1,
+    Math.floor((now.getTime() - start.getTime()) / 60000)
+  );
+
+  if (totalMinutes <= 45) {
+    return {
+      label: `${totalMinutes}'`,
+      approximate: true
+    };
+  }
+
+  if (totalMinutes < 60) {
+    return {
+      label: "Intervalo",
+      approximate: true
+    };
+  }
+
+  if (totalMinutes <= 105) {
+    const secondHalfMinute = Math.min(90, totalMinutes - 15);
+
+    return {
+      label: `${Math.max(46, secondHalfMinute)}'`,
+      approximate: true
+    };
+  }
+
+  return {
+    label: "90+'",
+    approximate: true
+  };
 }
 
 function liveStatusLabel(match) {

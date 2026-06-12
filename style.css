@@ -2306,3 +2306,105 @@ tr:nth-child(even) td {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* V40 - transmissão automática do próximo jogo */
+.upcoming-stream-block {
+  margin-top: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(0,167,255,.34);
+  border-radius: 12px;
+  background: rgba(4,11,24,.96);
+}
+
+.upcoming-stream-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+}
+
+.upcoming-stream-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upcoming-stream-head span {
+  flex: 0 0 auto;
+  border: 1px solid rgba(0,167,255,.35);
+  border-radius: 999px;
+  padding: 3px 6px;
+  background: rgba(0,167,255,.10);
+  color: #8edbff;
+  font-size: 8px;
+  font-weight: 950;
+}
+
+.upcoming-youtube-embed {
+  border-top: 1px solid rgba(255,255,255,.07);
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+.upcoming-stream-link {
+  display: block;
+  padding: 7px 9px;
+  color: #8edbff;
+  text-align: center;
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+@media (max-width: 520px) {
+  .upcoming-stream-head {
+    padding: 6px 8px;
+  }
+
+  .upcoming-stream-head strong {
+    font-size: 10px;
+  }
+}
+
+
+/* V41 - minuto e live logo abaixo do placar */
+.live-game-card {
+  overflow: hidden;
+}
+
+.live-game-card .live-stream-block {
+  margin: 9px 0 0;
+}
+
+.live-game-card .live-stream-title {
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+.live-venue {
+  margin-top: 7px;
+  font-size: 10px;
+}
+
+.live-meta strong {
+  min-width: 58px;
+}
+
+@media (max-width: 520px) {
+  .live-game-card {
+    padding: 8px !important;
+  }
+
+  .live-game-card .live-stream-block {
+    margin-top: 7px;
+  }
+
+  .live-meta span:last-child {
+    width: 100%;
+    padding-left: 15px;
+  }
+}
