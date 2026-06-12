@@ -3,12 +3,13 @@ const STORE_KEY = "bolao-copa-2026-picks-v1";
 const DRAFT_KEY = "bolao-copa-2026-drafts-v1";
 
 const state = {
-  view: localStorage.getItem("bolao-view") || "inicio",
+  view: "inicio",
   picks: {},
   drafts: {},
   stats: {},
   videos: [],
   scorebat: {},
+  youtube: {},
   dataSource: {},
   selectedPlayer: localStorage.getItem("bolao-player") || "",
   playerCode: localStorage.getItem("bolao-player-code") || "",
@@ -102,8 +103,11 @@ const FLAG_SVG_CODES = {
 };
 
 function init() {
+  state.view = "inicio";
+  localStorage.setItem("bolao-view", "inicio");
   $("#site-title").textContent = DATA.settings.title;
   injectHeaderSponsor();
+  bindHeaderSponsorLink();
   state.stats = DATA.stats || {};
   mergePicks(DATA.initialPicks || []);
   loadLocalPicks();
@@ -112,8 +116,37 @@ function init() {
   loadBackendState();
   setupAutoRefresh();
   render();
+  window.requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  });
 }
 
+
+
+function bindHeaderSponsorLink() {
+  const hero = document.querySelector(".hero");
+
+  if (!hero || hero.dataset.sponsorLinkReady === "1") {
+    return;
+  }
+
+  hero.dataset.sponsorLinkReady = "1";
+  hero.setAttribute("role", "link");
+  hero.setAttribute("tabindex", "0");
+  hero.setAttribute("aria-label", "Abrir site da IA Pro Contato");
+
+  const openSponsor = () => {
+    window.open("https://www.iaprocontato.com.br/", "_blank", "noopener,noreferrer");
+  };
+
+  hero.addEventListener("click", openSponsor);
+  hero.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openSponsor();
+    }
+  });
+}
 
 function injectHeaderSponsor() {
   const topbar = document.querySelector(".topbar");
@@ -262,6 +295,7 @@ function loadBackendState(silent = false) {
       mergeMatches(payload.matches || []);
       state.stats = payload.stats || state.stats || {};
       state.videos = payload.videos || state.videos || [];
+      state.youtube = payload.youtube || state.youtube || {};
       state.dataSource = payload.dataSource || state.dataSource || {};
       state.loadedBackend = true;
       setBackendStatus("Online", "success");
@@ -419,13 +453,10 @@ function renderLiveSection() {
 
   if (!live.length) {
     return `
-      <section class="card">
-        <div class="title-row">
+      <section class="card live-empty-card">
+        <div class="live-empty-line">
           <h2>🔴 Ao vivo</h2>
-          <span class="kicker">${escapeHtml(source)}</span>
-        </div>
-        <div class="info-box">
-          Nenhum jogo em andamento no momento. O plano gratuito do Football-Data.org entrega os placares com atraso.
+          <span>Nenhum jogo agora</span>
         </div>
       </section>
     `;
@@ -468,15 +499,18 @@ function renderUpcomingGamesSection() {
   const upcoming = DATA.matches
     .filter((match) => makeDate(match) > now)
     .sort((a, b) => makeDate(a) - makeDate(b))
-    .slice(0, 3);
+    .slice(0, 2);
 
   return `
-    <section class="card">
+    <section class="card upcoming-card">
       <div class="title-row">
         <h2>⏭️ Próximos jogos</h2>
-        <span class="kicker">3 próximos</span>
+        <span class="kicker">2 próximos</span>
       </div>
-      ${upcoming.length ? `<div class="compact-games">${upcoming.map(compactGameCard).join("")}</div>` : `<div class="info-box">Sem próximos jogos cadastrados.</div>`}
+      ${upcoming.length
+        ? `<div class="compact-games">${upcoming.map(compactGameCard).join("")}</div>`
+        : `<div class="info-box">Sem próximos jogos cadastrados.</div>`
+      }
     </section>
   `;
 }
@@ -499,34 +533,142 @@ function compactGameCard(match) {
 
 
 function renderLatestVideosSection() {
-  const videos = Array.isArray(state.videos) ? state.videos.slice(0, 6) : [];
-  const scorebat = state.scorebat || {};
-  const emptyMessage = scorebat.message || "Aguardando vídeos do ScoreBat.";
+  const youtube = state.youtube || {};
+  const live = youtube.live || null;
+  const upcoming = youtube.upcoming || null;
+  const highlight = youtube.highlight || null;
+  const featured = live || upcoming || null;
 
-  if (!videos.length) {
+  if (youtube.enabled && (featured || highlight)) {
     return `
-      <section class="card video-status-card">
+      <section class="card youtube-section">
         <div class="title-row">
-          <h2>🎥 Vídeos</h2>
-          <span class="kicker">ScoreBat</span>
+          <h2>📺 CazéTV</h2>
+          <span class="kicker">${live ? "Ao vivo" : upcoming ? "Próxima live" : "Melhores momentos"}</span>
         </div>
-        <div class="scorebat-empty">
-          <strong>Nenhum vídeo disponível agora.</strong>
-          <span>${escapeHtml(emptyMessage)}</span>
+
+        <div class="youtube-grid ${featured && highlight ? "two-items" : ""}">
+          ${featured ? youtubeFeaturedCard(featured) : ""}
+          ${highlight && (!featured || highlight.id !== featured.id) ? youtubeHighlightCard(highlight) : ""}
+        </div>
+
+        <div class="youtube-auto-note">
+          Atualização automática pelo canal ${escapeHtml(youtube.channelTitle || "CazéTV")}.
         </div>
       </section>
     `;
   }
 
+  const scorebatVideos = Array.isArray(state.videos) ? state.videos.slice(0, 3) : [];
+
+  if (scorebatVideos.length) {
+    return `
+      <section class="card">
+        <div class="title-row">
+          <h2>🎥 Últimos vídeos</h2>
+          <span class="kicker">ScoreBat</span>
+        </div>
+        <div class="video-carousel">${scorebatVideos.map(videoCard).join("")}</div>
+      </section>
+    `;
+  }
+
   return `
-    <section class="card">
+    <section class="card video-status-card">
       <div class="title-row">
-        <h2>🎥 Últimos vídeos</h2>
-        <span class="kicker">ScoreBat · ${videos.length}</span>
+        <h2>📺 Vídeos</h2>
+        <span class="kicker">CazéTV</span>
       </div>
-      <div class="video-carousel">${videos.map(videoCard).join("")}</div>
+      <div class="scorebat-empty">
+        <strong>Nenhuma live ou melhores momentos encontrados agora.</strong>
+        <span>${escapeHtml(youtube.message || "Configure a API do YouTube para busca automática.")}</span>
+      </div>
     </section>
   `;
+}
+
+function youtubeFeaturedCard(video) {
+  const isLive = video.liveState === "live";
+  const label = isLive ? "AO VIVO" : "AGENDADO";
+  const when = formatYouTubeDate(video.actualStartTime || video.scheduledStartTime);
+
+  if (video.embeddable) {
+    return `
+      <article class="youtube-featured-card">
+        <div class="youtube-card-head">
+          <span class="youtube-live-label ${isLive ? "is-live" : ""}">${label}</span>
+          <strong>${escapeHtml(video.title || "Transmissão CazéTV")}</strong>
+        </div>
+        <div class="youtube-embed">
+          <iframe
+            src="${video.embedUrl}"
+            title="${escapeHtml(video.title || "Transmissão CazéTV")}"
+            loading="lazy"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+          ></iframe>
+        </div>
+        <a class="youtube-open-link" href="${video.url}" target="_blank" rel="noopener noreferrer">
+          ${isLive ? "Assistir no YouTube" : `Abrir transmissão${when ? ` · ${when}` : ""}`}
+        </a>
+      </article>
+    `;
+  }
+
+  return youtubeLinkCard(video, label, when);
+}
+
+function youtubeHighlightCard(video) {
+  return `
+    <article class="youtube-highlight-card">
+      <a href="${video.url}" target="_blank" rel="noopener noreferrer">
+        <div class="youtube-thumb">
+          ${video.thumbnail
+            ? `<img src="${video.thumbnail}" alt="${escapeHtml(video.title || "Melhores momentos")}">`
+            : `<div class="video-thumb-empty">▶</div>`
+          }
+          <span>▶ Melhores momentos</span>
+        </div>
+        <div class="youtube-highlight-body">
+          <strong>${escapeHtml(video.title || "Último vídeo")}</strong>
+          <em>${formatYouTubeDate(video.publishedAt)}</em>
+        </div>
+      </a>
+    </article>
+  `;
+}
+
+function youtubeLinkCard(video, label, when) {
+  return `
+    <article class="youtube-highlight-card">
+      <a href="${video.url}" target="_blank" rel="noopener noreferrer">
+        <div class="youtube-thumb">
+          ${video.thumbnail
+            ? `<img src="${video.thumbnail}" alt="${escapeHtml(video.title || "Vídeo CazéTV")}">`
+            : `<div class="video-thumb-empty">▶</div>`
+          }
+          <span>${label}</span>
+        </div>
+        <div class="youtube-highlight-body">
+          <strong>${escapeHtml(video.title || "Vídeo CazéTV")}</strong>
+          <em>${when || "Abrir no YouTube"}</em>
+        </div>
+      </a>
+    </article>
+  `;
+}
+
+function formatYouTubeDate(value) {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  });
 }
 
 function videoCard(video) {
@@ -562,7 +704,6 @@ function renderOfficial() {
     <div class="stack">
       ${renderGroupsSection()}
       ${renderKnockoutSection()}
-      ${renderStatsSection()}
       ${renderSponsorBlock(true)}
     </div>
   `;
@@ -582,7 +723,13 @@ function renderPicksArea() {
 
 function renderSponsorBlock(compact = false) {
   return `
-    <section class="card sponsor-card ${compact ? "compact" : ""}">
+    <a
+      class="card sponsor-card sponsor-card-link ${compact ? "compact" : ""}"
+      href="https://www.iaprocontato.com.br/"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Abrir site da IA Pro Contato"
+    >
       <div class="sponsor-wrap">
         <div class="sponsor-logo"><img src="logo-ia-pro-contato.png" alt="IA Pro Contato"></div>
         <div class="sponsor-text">
@@ -595,7 +742,7 @@ function renderSponsorBlock(compact = false) {
         Dados de futebol fornecidos pela API Football-Data.org.
         <span>${escapeHtml(currentFootballSourceLabel())}</span>
       </div>
-    </section>
+    </a>
   `;
 }
 
@@ -1116,7 +1263,6 @@ function rankingTable(ranking) {
             <th>Player</th>
             <th class="center">Pts</th>
             <th class="center">Exatos</th>
-            <th class="center">Resultados</th>
           </tr>
         </thead>
         <tbody>
@@ -1126,7 +1272,6 @@ function rankingTable(ranking) {
               <td>${row.name}</td>
               <td class="center strong">${row.points}</td>
               <td class="center">${row.exacts}</td>
-              <td class="center">${row.results}</td>
             </tr>
           `).join("")}
         </tbody>
