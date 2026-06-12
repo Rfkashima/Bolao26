@@ -698,39 +698,20 @@ function normalizeVideoText(value) {
 }
 
 function renderLiveYouTubeStream(video) {
-  if (!video.embeddable) {
-    return `
-      <div class="live-stream-block">
-        <div class="live-stream-title">
-          <strong>📺 Transmissão CazéTV</strong>
-          <span>Ao vivo</span>
-        </div>
-        <a class="live-stream-open" href="${video.url}" target="_blank" rel="noopener noreferrer">
-          Assistir à transmissão no YouTube
-        </a>
-      </div>
-    `;
-  }
-
   return `
-    <div class="live-stream-block">
+    <div class="live-stream-block live-stream-link-only">
       <div class="live-stream-title">
-        <strong>📺 Transmissão CazéTV</strong>
+        <strong>📺 CazéTV</strong>
         <span>Ao vivo</span>
       </div>
 
-      <div class="youtube-embed live-youtube-embed">
-        <iframe
-          src="${video.embedUrl}"
-          title="${escapeHtml(video.title || "Transmissão CazéTV")}"
-          loading="lazy"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowfullscreen
-        ></iframe>
-      </div>
-
-      <a class="live-stream-open" href="${video.url}" target="_blank" rel="noopener noreferrer">
-        Abrir no YouTube
+      <a
+        class="live-stream-open"
+        href="${video.url}"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        ▶ Assistir ao jogo ao vivo no YouTube
       </a>
     </div>
   `;
@@ -762,10 +743,6 @@ function renderUpcomingGamesSection() {
     .sort((a, b) => makeDate(a) - makeDate(b))
     .slice(0, 2);
 
-  const upcomingVideo = state.youtube && state.youtube.upcoming
-    ? state.youtube.upcoming
-    : null;
-
   return `
     <section class="card upcoming-card">
       <div class="title-row">
@@ -777,61 +754,7 @@ function renderUpcomingGamesSection() {
         ? `<div class="compact-games">${upcoming.map(compactGameCard).join("")}</div>`
         : `<div class="info-box">Sem próximos jogos cadastrados.</div>`
       }
-
-      ${upcomingVideo ? renderUpcomingYouTubeStream(upcomingVideo) : ""}
     </section>
-  `;
-}
-
-function renderUpcomingYouTubeStream(video) {
-  const when = formatYouTubeDate(video.scheduledStartTime);
-
-  if (!video.embeddable) {
-    return `
-      <div class="upcoming-stream-block">
-        <div class="upcoming-stream-head">
-          <strong>📺 Transmissão do próximo jogo</strong>
-          <span>${when || "Agendada"}</span>
-        </div>
-
-        <a
-          class="upcoming-stream-link"
-          href="${video.url}"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          ${escapeHtml(video.title || "Abrir transmissão da CazéTV")}
-        </a>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="upcoming-stream-block">
-      <div class="upcoming-stream-head">
-        <strong>📺 Transmissão do próximo jogo</strong>
-        <span>${when || "Agendada"}</span>
-      </div>
-
-      <div class="youtube-embed upcoming-youtube-embed">
-        <iframe
-          src="${video.embedUrl}"
-          title="${escapeHtml(video.title || "Próxima transmissão da CazéTV")}"
-          loading="lazy"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowfullscreen
-        ></iframe>
-      </div>
-
-      <a
-        class="upcoming-stream-link"
-        href="${video.url}"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        Abrir transmissão no YouTube
-      </a>
-    </div>
   `;
 }
 
