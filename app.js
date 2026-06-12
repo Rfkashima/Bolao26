@@ -596,22 +596,23 @@ function findYouTubeLiveForMatches(matches) {
 }
 
 function youtubeVideoMatchesMatch(video, match) {
-  const text = normalizeVideoText(
-    `${video && video.title || ""} ${video && video.description || ""}`
+  const title = normalizeVideoText(
+    video && video.title || ""
   );
 
-  return videoTextContainsTeam(text, match.team1) &&
-    videoTextContainsTeam(text, match.team2);
+  return videoTextContainsTeam(title, match.team1) &&
+    videoTextContainsTeam(title, match.team2);
 }
 
 function videoTextContainsTeam(text, team) {
+  const normalizedText = ` ${normalizeVideoText(text)} `;
   const aliases = [
     team,
     SHORT_COUNTRY_NAMES[team] || "",
     countryCode(team)
   ];
 
-  const extras = {
+  const extraAliases = {
     "Estados Unidos": ["EUA", "USA", "United States"],
     "República Tcheca": ["Rep Tcheca", "Tchéquia", "Czechia"],
     "África do Sul": ["Africa do Sul", "South Africa"],
@@ -624,10 +625,10 @@ function videoTextContainsTeam(text, team) {
   };
 
   return aliases
-    .concat(extras[team] || [])
+    .concat(extraAliases[team] || [])
     .map(normalizeVideoText)
     .filter((alias) => alias.length >= 3)
-    .some((alias) => text.includes(alias));
+    .some((alias) => normalizedText.includes(` ${alias} `));
 }
 
 function normalizeVideoText(value) {
@@ -705,17 +706,76 @@ function renderUpcomingGamesSection() {
     .sort((a, b) => makeDate(a) - makeDate(b))
     .slice(0, 2);
 
+  const upcomingVideo = state.youtube && state.youtube.upcoming
+    ? state.youtube.upcoming
+    : null;
+
   return `
     <section class="card upcoming-card">
       <div class="title-row">
         <h2>⏭️ Próximos jogos</h2>
         <span class="kicker">2 próximos</span>
       </div>
+
       ${upcoming.length
         ? `<div class="compact-games">${upcoming.map(compactGameCard).join("")}</div>`
         : `<div class="info-box">Sem próximos jogos cadastrados.</div>`
       }
+
+      ${upcomingVideo ? renderUpcomingYouTubeStream(upcomingVideo) : ""}
     </section>
+  `;
+}
+
+function renderUpcomingYouTubeStream(video) {
+  const when = formatYouTubeDate(video.scheduledStartTime);
+
+  if (!video.embeddable) {
+    return `
+      <div class="upcoming-stream-block">
+        <div class="upcoming-stream-head">
+          <strong>📺 Transmissão do próximo jogo</strong>
+          <span>${when || "Agendada"}</span>
+        </div>
+
+        <a
+          class="upcoming-stream-link"
+          href="${video.url}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          ${escapeHtml(video.title || "Abrir transmissão da CazéTV")}
+        </a>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="upcoming-stream-block">
+      <div class="upcoming-stream-head">
+        <strong>📺 Transmissão do próximo jogo</strong>
+        <span>${when || "Agendada"}</span>
+      </div>
+
+      <div class="youtube-embed upcoming-youtube-embed">
+        <iframe
+          src="${video.embedUrl}"
+          title="${escapeHtml(video.title || "Próxima transmissão da CazéTV")}"
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+        ></iframe>
+      </div>
+
+      <a
+        class="upcoming-stream-link"
+        href="${video.url}"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Abrir transmissão no YouTube
+      </a>
+    </div>
   `;
 }
 
