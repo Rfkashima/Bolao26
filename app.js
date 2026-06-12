@@ -312,7 +312,7 @@ function setupAutoRefresh() {
 
   backendRefreshTimer = window.setInterval(() => {
     loadBackendState(true);
-  }, 60000);
+  }, 30000);
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
@@ -320,7 +320,6 @@ function setupAutoRefresh() {
     }
   });
 }
-
 
 function setBackendStatus(text, type) {
   const el = $("#backend-status");
@@ -469,13 +468,10 @@ function renderLiveSection() {
     return renderLastFinishedMatch(lastMatch);
   }
 
-  const source = currentFootballSourceLabel();
-
   return `
     <section class="card live-section">
-      <div class="title-row">
+      <div class="title-row live-title-row">
         <h2>🔴 Ao vivo</h2>
-        <span class="live-pill">${escapeHtml(source)}</span>
       </div>
 
       <div class="games-list">
@@ -496,8 +492,8 @@ function liveGameCard(match) {
       </div>
 
       ${liveMatchLine(match)}
-      ${liveVideo ? renderLiveYouTubeStream(liveVideo) : ""}
       ${liveMatchDetails(match)}
+      ${liveVideo ? renderLiveYouTubeStream(liveVideo) : ""}
 
       <div class="muted live-venue">${escapeHtml(match.venue || "")}</div>
     </div>
@@ -506,17 +502,32 @@ function liveGameCard(match) {
 
 function liveMatchLine(match) {
   const clock = getLiveClock(match);
+  const homeScore = match.score1 === null ||
+    match.score1 === undefined
+      ? "0"
+      : String(match.score1);
+  const awayScore = match.score2 === null ||
+    match.score2 === undefined
+      ? "0"
+      : String(match.score2);
 
   return `
-    <div class="match-line live-match-line">
-      <div class="match-left">${country(match.team1)}</div>
-
-      <div class="live-score-center">
-        <strong>${matchResultInline(match)}</strong>
-        <span>${escapeHtml(clock.label)}</span>
+    <div class="live-scoreboard">
+      <div class="live-score-team live-score-team-home">
+        ${country(match.team1)}
       </div>
 
-      <div class="match-right">${country(match.team2)}</div>
+      <strong class="live-score-number">${homeScore}</strong>
+
+      <div class="live-score-clock">
+        ${clock.label ? escapeHtml(clock.label) : ""}
+      </div>
+
+      <strong class="live-score-number">${awayScore}</strong>
+
+      <div class="live-score-team live-score-team-away">
+        ${country(match.team2)}
+      </div>
     </div>
   `;
 }
@@ -699,21 +710,16 @@ function normalizeVideoText(value) {
 
 function renderLiveYouTubeStream(video) {
   return `
-    <div class="live-stream-block live-stream-link-only">
-      <div class="live-stream-title">
-        <strong>📺 CazéTV</strong>
-        <span>Ao vivo</span>
-      </div>
-
-      <a
-        class="live-stream-open"
-        href="${video.url}"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        ▶ Assistir ao jogo ao vivo no YouTube
-      </a>
-    </div>
+    <a
+      class="live-youtube-link"
+      href="${video.url}"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <span>📺</span>
+      <strong>Assistir na CazéTV</strong>
+      <em>↗</em>
+    </a>
   `;
 }
 
@@ -1104,82 +1110,167 @@ function renderStatsSection() {
 }
 
 function statCard(title, rows) {
-  const cleanRows = Array.isArray(rows) ? rows.filter(Boolean).slice(0, 10) : [];
+  const cleanRows = Array.isArray(rows)
+    ? rows.filter(Boolean).slice(0, 10)
+    : [];
 
   return `
     <div class="stat-card">
       <h3>${title}</h3>
-      ${cleanRows.length ? cleanRows.map((row) => `
-        <div class="stat-row">
-          <span>${row.player || row.nome || "-"}</span>
-          <span>${row.team ? country(row.team) : ""} ${row.total ?? row.value ?? row.qtd ?? 0}</span>
-        </div>
-      `).join("") : `<div class="muted" style="font-size:13px">Aguardando dados oficiais.</div>`}
+
+      ${cleanRows.length
+        ? cleanRows.map((row) => {
+            const player = escapeHtml(
+              row.player ||
+              row.nome ||
+              "-"
+            );
+            const team = String(row.team || "");
+            const total = row.total ??
+              row.value ??
+              row.qtd ??
+              0;
+
+            return `
+              <div class="stat-row">
+                <div class="stat-player-side">
+                  <strong>${player}</strong>
+                  ${team
+                    ? `<span class="stat-country-flag" title="${escapeHtml(team)}">${flagMarkup(team)}</span>`
+                    : ""
+                  }
+                </div>
+
+                <strong class="stat-quantity">${total}</strong>
+              </div>
+            `;
+          }).join("")
+        : `<div class="muted stat-empty">Aguardando dados oficiais.</div>`
+      }
     </div>
   `;
 }
 
-
 function liveMatchDetails(match) {
   const goals = liveGoals(match);
   const cards = matchCards(match);
+  const events = goals
+    .map((event) => Object.assign({}, event, {
+      eventKind: "goal",
+      icon: "⚽"
+    }))
+    .concat(
+      cards.map((event) => Object.assign({}, event, {
+        eventKind: "card"
+      }))
+    )
+    .sort((a, b) => {
+      return Number(a.minute || 999) -
+        Number(b.minute || 999);
+    });
 
-  if (!goals.length && !cards.length) {
+  if (!events.length) {
     return "";
   }
 
   return `
-    <div class="live-details">
-      ${goals.length ? `
-        <div class="goal-list">
-          ${goals.map((goal) => `
-            <div class="goal-item">
-              <span>${goal.minute ? `${goal.minute}'` : "Gol"}</span>
-              <div class="event-person">
-                <strong>⚽ ${escapeHtml(goal.player || "Gol")}</strong>
-                ${goal.assist ? `<small>Assistência: ${escapeHtml(goal.assist)}</small>` : ""}
-              </div>
-              <em>${escapeHtml(goal.team || "")}</em>
-            </div>
-          `).join("")}
-        </div>
-      ` : ""}
-
-      ${cards.length ? `
-        <div class="card-event-list">
-          ${cards.map((card) => `
-            <div class="card-event-item">
-              <span>${card.minute ? `${card.minute}'` : ""}</span>
-              <div class="event-person">
-                <strong>${card.icon} ${escapeHtml(card.player || card.label)}</strong>
-                <small>${escapeHtml(card.label)}</small>
-              </div>
-              <em>${escapeHtml(card.team || "")}</em>
-            </div>
-          `).join("")}
-        </div>
-      ` : ""}
+    <div class="live-event-list">
+      ${events.map((event) => {
+        return liveEventRow(event, match);
+      }).join("")}
     </div>
   `;
+}
+
+function liveEventRow(event, match) {
+  const side = eventTeamSide(event.team, match);
+  const icon = event.eventKind === "goal"
+    ? "⚽"
+    : event.icon || "🟨";
+  const player = escapeHtml(
+    event.player ||
+    event.label ||
+    ""
+  );
+  const assist = event.assist
+    ? `<small>Assistência: ${escapeHtml(event.assist)}</small>`
+    : "";
+  const minute = event.minute
+    ? `${escapeHtml(String(event.minute))}'`
+    : "";
+
+  const content = `
+    <div class="live-event-person">
+      <strong>${icon} ${player}</strong>
+      ${assist}
+    </div>
+  `;
+
+  return `
+    <div class="live-event-row live-event-${side}">
+      <div class="live-event-home">
+        ${side === "home" ? content : ""}
+      </div>
+
+      <span class="live-event-minute">${minute}</span>
+
+      <div class="live-event-away">
+        ${side === "away" ? content : ""}
+      </div>
+    </div>
+  `;
+}
+
+function eventTeamSide(team, match) {
+  const normalizedTeam = normalizeEventTeamName(team);
+  const home = normalizeEventTeamName(match.team1);
+  const away = normalizeEventTeamName(match.team2);
+
+  if (
+    normalizedTeam === away ||
+    (
+      normalizedTeam.includes("bosnia") &&
+      away.includes("bosnia")
+    )
+  ) {
+    return "away";
+  }
+
+  if (
+    normalizedTeam === home ||
+    (
+      normalizedTeam.includes("canada") &&
+      home.includes("canada")
+    )
+  ) {
+    return "home";
+  }
+
+  return "home";
+}
+
+function normalizeEventTeamName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase()
+    .replace("bosniaandherzegovina", "bosnia")
+    .replace("bosniaherzegovina", "bosnia");
 }
 
 function getLiveClock(match) {
   const official = formatElapsed(match.elapsed);
 
-  if (official) {
+  if (!official) {
     return {
-      label: official.includes("'") ||
-        official === "INTERVALO" ||
-        official === "PRORROGAÇÃO" ||
-        official === "PÊNALTIS"
-          ? official
-          : `${official}'`,
+      label: "",
       approximate: false
     };
   }
 
   return {
-    label: "AO VIVO",
+    label: official,
     approximate: false
   };
 }
@@ -1297,14 +1388,39 @@ function parseGoalText(text, team) {
 
 function formatElapsed(value) {
   const raw = String(value || "").trim();
+  const normalized = raw.toUpperCase();
 
-  if (!raw || raw.toLowerCase() === "notstarted") return "";
+  if (
+    !raw ||
+    normalized === "NOTSTARTED" ||
+    normalized === "LIVE" ||
+    normalized === "AO VIVO" ||
+    normalized === "IN PLAY" ||
+    normalized === "IN_PLAY"
+  ) {
+    return "";
+  }
 
-  if (/^\d/.test(raw)) return `${raw.replace(/['’]/g, "")}'`;
+  if (/^\d{1,3}\+\d{1,2}$/.test(raw)) {
+    return `${raw}'`;
+  }
 
-  return raw.toUpperCase();
+  if (/^\d{1,3}$/.test(raw)) {
+    return `${raw}'`;
+  }
+
+  if (
+    normalized === "INTERVALO" ||
+    normalized === "PRORROGAÇÃO" ||
+    normalized === "PÊNALTIS" ||
+    normalized === "1º TEMPO" ||
+    normalized === "2º TEMPO"
+  ) {
+    return normalized;
+  }
+
+  return "";
 }
-
 
 function gameCard(match) {
   return `
