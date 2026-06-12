@@ -495,11 +495,28 @@ function liveGameCard(match) {
         <span>${formatDate(match.date)} · ${match.time}</span>
       </div>
 
-      ${matchLine(match)}
-      ${liveMatchDetails(match)}
+      ${liveMatchLine(match)}
       ${liveVideo ? renderLiveYouTubeStream(liveVideo) : ""}
+      ${liveMatchDetails(match)}
 
       <div class="muted live-venue">${escapeHtml(match.venue || "")}</div>
+    </div>
+  `;
+}
+
+function liveMatchLine(match) {
+  const clock = getLiveClock(match);
+
+  return `
+    <div class="match-line live-match-line">
+      <div class="match-left">${country(match.team1)}</div>
+
+      <div class="live-score-center">
+        <strong>${matchResultInline(match)}</strong>
+        <span>${escapeHtml(clock.label)}</span>
+      </div>
+
+      <div class="match-right">${country(match.team2)}</div>
     </div>
   `;
 }
@@ -1183,16 +1200,13 @@ function statCard(title, rows) {
 function liveMatchDetails(match) {
   const goals = liveGoals(match);
   const cards = matchCards(match);
-  const clock = getLiveClock(match);
+
+  if (!goals.length && !cards.length) {
+    return "";
+  }
 
   return `
-    <div class="live-details ${(goals.length || cards.length) ? "" : "live-details-clean"}">
-      <div class="live-meta">
-        <span class="live-dot"></span>
-        <strong>${escapeHtml(clock.label)}</strong>
-        <span>${clock.approximate ? "Minuto aproximado pelo horário" : "Atualização da API"}</span>
-      </div>
-
+    <div class="live-details">
       ${goals.length ? `
         <div class="goal-list">
           ${goals.map((goal) => `
@@ -1231,43 +1245,46 @@ function getLiveClock(match) {
 
   if (official) {
     return {
-      label: `${official} de jogo`,
+      label: official.includes("'") ||
+        official === "INTERVALO" ||
+        official === "PRORROGAÇÃO" ||
+        official === "PÊNALTIS"
+          ? official
+          : `${official}'`,
       approximate: false
     };
   }
 
   const start = makeDate(match);
   const now = new Date();
-  const totalMinutes = Math.max(
+  const elapsedMinutes = Math.max(
     1,
     Math.floor((now.getTime() - start.getTime()) / 60000)
   );
 
-  if (totalMinutes <= 45) {
+  if (elapsedMinutes <= 45) {
     return {
-      label: `${totalMinutes}'`,
+      label: `${elapsedMinutes}'`,
       approximate: true
     };
   }
 
-  if (totalMinutes < 60) {
+  if (elapsedMinutes <= 60) {
     return {
-      label: "Intervalo",
+      label: "INTERVALO",
       approximate: true
     };
   }
 
-  if (totalMinutes <= 105) {
-    const secondHalfMinute = Math.min(90, totalMinutes - 15);
-
-    return {
-      label: `${Math.max(46, secondHalfMinute)}'`,
-      approximate: true
-    };
-  }
+  const secondHalfMinute = Math.min(
+    90,
+    Math.max(46, elapsedMinutes - 15)
+  );
 
   return {
-    label: "90+'",
+    label: elapsedMinutes <= 110
+      ? `${secondHalfMinute}'`
+      : "90+'",
     approximate: true
   };
 }
