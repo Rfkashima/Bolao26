@@ -622,22 +622,26 @@ function renderLastFinishedMatch(match) {
 
         ${goals.length ? `
           <div class="finished-events-title">Gols</div>
-          <div class="finished-goals">
-            ${goals.map((goal) => `
-              <div class="finished-goal">
-                <span>${goal.minute ? `${goal.minute}'` : 'Gol'}</span>
-                <div class="event-person">
-                  <strong>⚽ ${escapeHtml(goal.player || 'Gol')}</strong>
-                  ${goal.assist ? `<small>Assistência: ${escapeHtml(goal.assist)}</small>` : ''}
-                </div>
-                <em>${escapeHtml(goal.team || '')}</em>
-              </div>
-            `).join('')}
+          <div class="live-event-list finished-goals-aligned">
+            ${goals.map((goal) => {
+              const side = eventTeamSide(goal.team, match);
+              const teamName = side === "away" ? match.team2 : match.team1;
+              const player = cleanGoalPlayer(goal.player) || `Gol do ${teamName}`;
+
+              return liveEventRow({
+                kind: "goal",
+                icon: "⚽",
+                player,
+                assist: goal.assist || "",
+                minute: cleanGoalMinute(goal.minute),
+                team: teamName
+              }, match);
+            }).join("")}
           </div>
-        ` : ''}
+        ` : ""}
 
         <div class="last-match-footer">
-          <span>${escapeHtml(match.venue || '')}</span>
+          <span>${escapeHtml(match.venue || "")}</span>
           <span>${escapeHtml(match.source || currentFootballSourceLabel())}</span>
         </div>
       </div>
@@ -1326,28 +1330,44 @@ function liveStatusLabel(match) {
 function liveGoals(match) {
   const home = normalizeGoalList(match.homeScorers, match.team1);
   const away = normalizeGoalList(match.awayScorers, match.team2);
-  const events = normalizeGoalList(match.events, '');
-  const merged = home.concat(away);
+  const eventGoals = normalizeGoalList(match.events, "")
+    .filter((event) => {
+      const type = String(event.type || "").toLowerCase();
+      return type.includes("gol") || type.includes("goal");
+    });
 
-  events.forEach((event) => {
-    const type = String(event.type || '').toLowerCase();
-
-    if (type.includes('gol') || type.includes('goal')) {
-      merged.push(event);
-    }
-  });
-
+  const merged = home.concat(away, eventGoals);
+  const goals = [];
   const seen = new Set();
-  const goals = merged.filter((goal) => {
-    const key = `${goal.player || ''}|${goal.minute || ''}|${goal.team || ''}`;
 
-    if (seen.has(key)) return false;
+  merged.forEach((goal) => {
+    const player = cleanGoalPlayer(goal.player);
+    const minute = cleanGoalMinute(goal.minute);
+    const side = eventTeamSide(goal.team, match);
+    const key = [
+      normalizeEventTeamName(player),
+      minute,
+      side
+    ].join("|");
+
+    if (!player && !minute) {
+      return;
+    }
+
+    if (seen.has(key)) {
+      return;
+    }
+
     seen.add(key);
-    return goal.player || goal.minute;
+    goals.push(Object.assign({}, goal, {
+      player,
+      minute,
+      team: side === "away" ? match.team2 : match.team1
+    }));
   });
 
-  appendMissingScoreGoals(goals, match, 'home');
-  appendMissingScoreGoals(goals, match, 'away');
+  appendMissingScoreGoals(goals, match, "home");
+  appendMissingScoreGoals(goals, match, "away");
 
   return goals.sort((a, b) => {
     return Number(a.minute || 999) - Number(b.minute || 999);
@@ -1422,52 +1442,154 @@ function matchCards(match) {
 function normalizeGoalList(value, team) {
   if (!value) return [];
 
-  if (Array.isArray(value)) {
-    return value.map((item) => {
-      if (typeof item === "string") {
-        return parseGoalText(item, team);
-      }
+  let list = value;
 
-      return {
-        type: item.type || "Gol",
-        goalType: item.goalType || "",
-        player: item.player || item.name || item.scorer || "",
-        playerIn: item.playerIn || "",
-        playerOut: item.playerOut || "",
-        assist: item.assist || item.assistant || "",
-        minute: item.minute || item.time || item.elapsed || "",
-        injuryTime: item.injuryTime || "",
-        team: item.team || team || "",
-        card: item.card || ""
-      };
-    }).filter(Boolean);
-  }
-
-  if (typeof value === "string") {
+  if (typeof list === "string") {
     try {
-      return normalizeGoalList(JSON.parse(value), team);
+      list = JSON.parse(list);
     } catch (_) {
-      return value
-        .split(/[,;|]/)
-        .map((item) => parseGoalText(item, team))
-        .filter(Boolean);
+      list = parseGoalArrayText(list);
     }
   }
 
-  return [];
+  if (!Array.isArray(list)) {
+    list = [list];
+  }
+
+  return list.map((item) => {
+    if (typeof item === "string") {
+      return parseGoalText(item, team);
+    }
+
+    if (!item || typeof item !== "object") {
+      return null;
+    }
+
+    const keys = Object.keys(item);
+    const fallbackKey = keys.length === 1 ? keys[0] : "";
+    const rawPlayer = item.player ||
+      item.name ||
+      item.scorer ||
+      fallbackKey ||
+      "";
+    const parsed = parseGoalText(rawPlayer, item.team || team || "");
+    const explicitMinute = cleanGoalMinute(
+      item.minute || item.time || item.elapsed || ""
+    );
+
+    return {
+      type: item.type || "Gol",
+      goalType: item.goalType || "",
+      player: parsed ? parsed.player : cleanGoalPlayer(rawPlayer),
+      playerIn: item.playerIn || "",
+      playerOut: item.playerOut || "",
+      assist: item.assist || item.assistant || "",
+      minute: explicitMinute || parsed && parsed.minute || "",
+      injuryTime: item.injuryTime || "",
+      team: item.team || parsed && parsed.team || team || "",
+      card: item.card || ""
+    };
+  }).filter((item) => {
+    return item && (
+      item.player ||
+      item.playerIn ||
+      item.playerOut ||
+      item.minute
+    );
+  });
+}
+
+function parseGoalArrayText(value) {
+  const text = String(value || "").trim();
+
+  if (text.startsWith("{") && text.endsWith("}")) {
+    const inner = text.slice(1, -1);
+    const items = [];
+    const regex = /"((?:\\.|[^"\\])*)"/g;
+    let match;
+
+    while ((match = regex.exec(inner)) !== null) {
+      items.push(
+        match[1]
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, "\\")
+      );
+    }
+
+    if (items.length) {
+      return items;
+    }
+  }
+
+  return text
+    .split(/[,;|]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function cleanGoalPlayer(value) {
+  let text = String(value || "")
+    .replace(/\\"/g, '"')
+    .trim();
+
+  for (let index = 0; index < 5; index++) {
+    const previous = text;
+
+    if (
+      (text.startsWith("{") && text.endsWith("}")) ||
+      (text.startsWith("[") && text.endsWith("]"))
+    ) {
+      text = text.slice(1, -1).trim();
+    }
+
+    if (
+      (text.startsWith('"') && text.endsWith('"')) ||
+      (text.startsWith("'") && text.endsWith("'"))
+    ) {
+      text = text.slice(1, -1).trim();
+    }
+
+    if (text === previous) {
+      break;
+    }
+  }
+
+  return text
+    .replace(/^[{[\s"']+/, "")
+    .replace(/[}\]\s"']+$/, "")
+    .replace(/^gol\s+(?:de|do|da)\s+/i, "")
+    .trim();
+}
+
+function cleanGoalMinute(value) {
+  const match = String(value || "").match(/\d{1,3}(?:\+\d{1,2})?/);
+  return match ? match[0] : "";
 }
 
 function parseGoalText(text, team) {
-  const raw = String(text || "").trim();
-  if (!raw || raw.toLowerCase() === "null") return null;
+  const raw = cleanGoalPlayer(text);
 
-  const match = raw.match(/^(.*?)\s*(?:[-–(]\s*)?(\d{1,3}(?:\+\d{1,2})?)['’]?\)?$/);
-
-  if (match && match[1].trim()) {
-    return { player: match[1].trim(), minute: match[2].trim(), team };
+  if (!raw || raw.toLowerCase() === "null") {
+    return null;
   }
 
-  return { player: raw, minute: "", team };
+  const match = raw.match(
+    /^(.*?)\s*(?:[-–(]\s*)?(\d{1,3}(?:\+\d{1,2})?)\s*['’]?\s*\)?$/
+  );
+
+  if (match && match[1].trim()) {
+    return {
+      player: cleanGoalPlayer(match[1]),
+      minute: cleanGoalMinute(match[2]),
+      team
+    };
+  }
+
+  return {
+    player: cleanGoalPlayer(raw),
+    minute: "",
+    team
+  };
 }
 
 function formatElapsed(value) {
