@@ -1178,37 +1178,9 @@ function getLiveClock(match) {
     };
   }
 
-  const start = makeDate(match);
-  const now = new Date();
-  const elapsedMinutes = Math.max(
-    1,
-    Math.floor((now.getTime() - start.getTime()) / 60000)
-  );
-
-  if (elapsedMinutes <= 45) {
-    return {
-      label: `${elapsedMinutes}'`,
-      approximate: true
-    };
-  }
-
-  if (elapsedMinutes <= 60) {
-    return {
-      label: "INTERVALO",
-      approximate: true
-    };
-  }
-
-  const secondHalfMinute = Math.min(
-    90,
-    Math.max(46, elapsedMinutes - 15)
-  );
-
   return {
-    label: elapsedMinutes <= 110
-      ? `${secondHalfMinute}'`
-      : "90+'",
-    approximate: true
+    label: "AO VIVO",
+    approximate: false
   };
 }
 
