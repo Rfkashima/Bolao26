@@ -645,7 +645,8 @@ function renderLastFinishedMatch(match) {
                 player,
                 assist: goal.assist || "",
                 minute: cleanGoalMinute(goal.minute),
-                team: teamName
+                team: teamName,
+                goalType: goal.goalType || ""
               }, match);
             }).join("")}
           </div>
@@ -1179,9 +1180,13 @@ function liveEventRow(event, match) {
       </div>
     `;
   } else {
+    const ownGoal = String(event.goalType || "") === "own_goal"
+      ? " (GC)"
+      : "";
+
     content = `
       <div class="live-event-person">
-        <strong>${event.icon || ""} ${escapeHtml(event.player || event.label || "")}</strong>
+        <strong>${event.icon || ""} ${escapeHtml(event.player || event.label || "")}${ownGoal}</strong>
         ${event.assist
           ? `<small>Assistência: ${escapeHtml(event.assist)}</small>`
           : event.label && event.kind === "card"
@@ -1314,101 +1319,41 @@ function liveStatusLabel(match) {
 }
 
 function liveGoals(match) {
-  const eventGoals = {
-    home: [],
-    away: []
-  };
-
-  const scorerGoals = {
-    home: [],
-    away: []
-  };
-
-  normalizeGoalList(match.events, "")
-    .filter((event) => {
-      const type = String(event.type || "").toLowerCase();
-      return type.includes("gol") || type.includes("goal");
-    })
-    .forEach((goal) => {
-      const player = cleanGoalPlayer(goal.player || goal.label || "");
-      const minute = cleanGoalMinute(goal.minute);
-      const side = eventTeamSide(goal.team, match);
-
-      if (!player || !minute) {
-        return;
-      }
-
-      eventGoals[side].push(Object.assign({}, goal, {
-        player,
-        minute,
-        team: side === "away" ? match.team2 : match.team1,
-        sourcePriority: 2
-      }));
-    });
-
-  normalizeGoalList(match.homeScorers, match.team1).forEach((goal) => {
-    const player = cleanGoalPlayer(goal.player || goal.label || "");
-    const minute = cleanGoalMinute(goal.minute);
-
-    if (!player || !minute) {
-      return;
-    }
-
-    scorerGoals.home.push(Object.assign({}, goal, {
-      player,
-      minute,
-      team: match.team1,
-      sourcePriority: 1
-    }));
-  });
-
-  normalizeGoalList(match.awayScorers, match.team2).forEach((goal) => {
-    const player = cleanGoalPlayer(goal.player || goal.label || "");
-    const minute = cleanGoalMinute(goal.minute);
-
-    if (!player || !minute) {
-      return;
-    }
-
-    scorerGoals.away.push(Object.assign({}, goal, {
-      player,
-      minute,
-      team: match.team2,
-      sourcePriority: 1
-    }));
-  });
-
-  const goals = [];
-
-  ["home", "away"].forEach((side) => {
-    const targetScore = matchScoreForSide(match, side);
-
-    if (targetScore <= 0) {
-      return;
-    }
-
-    /*
-     * Regra principal:
-     * - se houver evento real em match.events para o lado, usa só match.events;
-     * - homeScorers/awayScorers entram apenas quando NÃO existe evento real.
-     *
-     * Isso impede que um dado antigo/errado como "C. Larin 11'"
-     * seja misturado com o evento correto "C. Larin 79'".
-     */
-    const source = eventGoals[side].length
-      ? eventGoals[side]
-      : scorerGoals[side];
-
-    uniqueGoalsForSide(source, side)
-      .slice(0, targetScore)
-      .forEach((goal) => {
-        goals.push(goal);
+  const homeGoals = uniqueGoalsForSide(
+    normalizeGoalList(
+      match.homeScorers,
+      match.team1
+    ).map((goal) => {
+      return Object.assign({}, goal, {
+        team: match.team1
       });
-  });
+    }),
+    "home"
+  ).slice(0, matchScoreForSide(match, "home"));
 
-  return goals.sort((a, b) => {
-    return Number(a.minute || 999) - Number(b.minute || 999);
-  });
+  const awayGoals = uniqueGoalsForSide(
+    normalizeGoalList(
+      match.awayScorers,
+      match.team2
+    ).map((goal) => {
+      return Object.assign({}, goal, {
+        team: match.team2
+      });
+    }),
+    "away"
+  ).slice(0, matchScoreForSide(match, "away"));
+
+  /*
+   * A fonte única já separa os gols por lado.
+   * Não usa match.events junto com homeScorers/awayScorers,
+   * evitando duplicação e inversão do time.
+   */
+  return homeGoals
+    .concat(awayGoals)
+    .sort((a, b) => {
+      return goalMinuteSortValue(a.minute) -
+        goalMinuteSortValue(b.minute);
+    });
 }
 
 function appendMissingScoreGoals(goals, match, side) {
@@ -1441,38 +1386,73 @@ function matchScoreForSide(match, side) {
 }
 
 function uniqueGoalsForSide(list, side) {
-  const byGoal = new Map();
+  const byMinute = new Map();
+  const withoutMinute = new Map();
 
   (Array.isArray(list) ? list : []).forEach((goal) => {
-    const player = cleanGoalPlayer(goal.player || goal.label || '');
+    const player = cleanGoalPlayer(
+      goal.player ||
+      goal.label ||
+      ""
+    );
     const minute = cleanGoalMinute(goal.minute);
-    const playerKey = normalizeEventTeamName(player);
-    const minuteKey = minute || 'sem-minuto';
-    const key = playerKey
-      ? `${playerKey}-${minuteKey}`
-      : `${side}-${minuteKey}`;
     const normalized = Object.assign({}, goal, {
       player,
       minute
     });
-    const current = byGoal.get(key);
 
-    if (
-      !current ||
-      goalCandidateRank(normalized) > goalCandidateRank(current)
-    ) {
-      byGoal.set(key, normalized);
+    if (!player && !minute) {
+      return;
+    }
+
+    if (minute) {
+      const key = `minute:${minute}`;
+      const current = byMinute.get(key);
+
+      if (
+        !current ||
+        goalPlayerNameRank(player) >
+          goalPlayerNameRank(current.player)
+      ) {
+        byMinute.set(key, normalized);
+      }
+
+      return;
+    }
+
+    const key = `player:${normalizeEventTeamName(player)}`;
+
+    if (!withoutMinute.has(key)) {
+      withoutMinute.set(key, normalized);
     }
   });
 
-  return Array.from(byGoal.values())
-    .filter((goal) => {
-      return cleanGoalPlayer(goal.player || goal.label || '') ||
-        cleanGoalMinute(goal.minute);
-    })
+  return Array.from(byMinute.values())
+    .concat(Array.from(withoutMinute.values()))
     .sort((a, b) => {
-      return goalCandidateRank(b) - goalCandidateRank(a);
+      return goalMinuteSortValue(a.minute) -
+        goalMinuteSortValue(b.minute);
     });
+}
+
+function goalMinuteSortValue(value) {
+  const raw = cleanGoalMinute(value);
+  const match = raw.match(/^(\d{1,3})(?:\+(\d{1,2}))?$/);
+
+  if (!match) {
+    return 999;
+  }
+
+  return Number(match[1]) +
+    Number(match[2] || 0) / 100;
+}
+
+function goalPlayerNameRank(value) {
+  const text = String(value || "");
+  const latin = (text.match(/[A-Za-zÀ-ÿ]/g) || []).length;
+  const nonLatin = (text.match(/[^\x00-\x7F]/g) || []).length;
+
+  return latin * 10 - nonLatin;
 }
 
 function goalCandidateRank(goal) {
@@ -1564,21 +1544,37 @@ function normalizeGoalList(value, team) {
       item.scorer ||
       fallbackKey ||
       "";
-    const parsed = parseGoalText(rawPlayer, item.team || team || "");
+    const parsed = parseGoalText(
+      rawPlayer,
+      item.team || team || ""
+    );
     const explicitMinute = cleanGoalMinute(
-      item.minute || item.time || item.elapsed || ""
+      item.minute ||
+      item.time ||
+      item.elapsed ||
+      ""
     );
 
     return {
       type: item.type || "Gol",
-      goalType: item.goalType || "",
-      player: parsed ? parsed.player : cleanGoalPlayer(rawPlayer),
+      goalType: item.goalType ||
+        item.goal_type ||
+        parsed && parsed.goalType ||
+        "",
+      player: parsed
+        ? parsed.player
+        : cleanGoalPlayer(rawPlayer),
       playerIn: item.playerIn || "",
       playerOut: item.playerOut || "",
       assist: item.assist || item.assistant || "",
-      minute: explicitMinute || parsed && parsed.minute || "",
+      minute: explicitMinute ||
+        parsed && parsed.minute ||
+        "",
       injuryTime: item.injuryTime || "",
-      team: item.team || parsed && parsed.team || team || "",
+      team: item.team ||
+        parsed && parsed.team ||
+        team ||
+        "",
       card: item.card || ""
     };
   }).filter((item) => {
@@ -1654,33 +1650,63 @@ function cleanGoalPlayer(value) {
 }
 
 function cleanGoalMinute(value) {
-  const match = String(value || "").match(/\d{1,3}(?:\+\d{1,2})?/);
-  return match ? match[0] : "";
+  const raw = String(value || "").trim();
+
+  const added = raw.match(
+    /(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})/
+  );
+
+  if (added) {
+    return `${Number(added[1])}+${Number(added[2])}`;
+  }
+
+  const normal = raw.match(/\d{1,3}/);
+  return normal ? String(Number(normal[0])) : "";
 }
 
 function parseGoalText(text, team) {
-  const raw = cleanGoalPlayer(text);
+  let raw = cleanGoalPlayer(text);
 
-  if (!raw || raw.toLowerCase() === "null") {
+  if (
+    !raw ||
+    raw.toLowerCase() === "null"
+  ) {
     return null;
   }
 
+  let goalType = "";
+
+  if (
+    /\((?:og|gc|own\s*goal|gol\s*contra)\)\s*$/i.test(raw) ||
+    /\b(?:og|gc)\s*$/i.test(raw)
+  ) {
+    goalType = "own_goal";
+    raw = raw
+      .replace(/\s*\((?:og|gc|own\s*goal|gol\s*contra)\)\s*$/i, "")
+      .replace(/\s+\b(?:og|gc)\s*$/i, "")
+      .trim();
+  }
+
   const match = raw.match(
-    /^(.*?)\s*(?:[-–(]\s*)?(\d{1,3}(?:\+\d{1,2})?)\s*['’]?\s*\)?$/
+    /^(.*?)\s+(\d{1,3})\s*['’]?\s*(?:\+\s*(\d{1,2})\s*['’]?)?\s*$/
   );
 
   if (match && match[1].trim()) {
     return {
       player: cleanGoalPlayer(match[1]),
-      minute: cleanGoalMinute(match[2]),
-      team
+      minute: match[3]
+        ? `${Number(match[2])}+${Number(match[3])}`
+        : String(Number(match[2])),
+      team,
+      goalType
     };
   }
 
   return {
     player: cleanGoalPlayer(raw),
     minute: "",
-    team
+    team,
+    goalType
   };
 }
 
