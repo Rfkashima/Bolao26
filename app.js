@@ -275,30 +275,40 @@ function mergeMatches(list) {
   if (!Array.isArray(list)) return;
 
   list.forEach((remote) => {
-    const match = DATA.matches.find((item) => item.id === remote.id || item.id === remote.matchId);
+    const match = DATA.matches.find((item) => {
+      return item.id === remote.id || item.id === remote.matchId;
+    });
+
     if (!match) return;
 
-    const remoteStatus = String(remote.status || remote.sourceStatus || '').toLowerCase();
-    const remoteElapsed = String(remote.elapsed || '').toLowerCase();
-    const notStarted = remoteStatus.includes('scheduled') ||
-      remoteStatus.includes('timed') ||
-      remoteStatus.includes('not_started') ||
-      remoteStatus.includes('not started') ||
-      remoteElapsed === 'notstarted' ||
-      remoteElapsed === 'not_started' ||
-      remoteElapsed === 'scheduled' ||
-      remoteElapsed === 'ns';
+    const sourceStatus = String(remote.sourceStatus || '').toLowerCase();
+    const status = String(remote.status || '').toLowerCase();
+    const elapsed = String(remote.elapsed || '').toLowerCase();
+    const notStarted = status.includes('pendente') ||
+      status.includes('scheduled') ||
+      status.includes('timed') ||
+      sourceStatus.includes('not_started') ||
+      sourceStatus.includes('not started') ||
+      sourceStatus.includes('scheduled') ||
+      sourceStatus.includes('timed') ||
+      elapsed === 'notstarted' ||
+      elapsed === 'not_started' ||
+      elapsed === 'scheduled' ||
+      elapsed === 'ns';
 
-    if (notStarted && makeDate(match) > new Date()) {
-      match.score1 = null;
-      match.score2 = null;
-    } else {
-      if (remote.score1 !== undefined) match.score1 = remote.score1 === null || remote.score1 === "" ? null : Number(remote.score1);
-      if (remote.score2 !== undefined) match.score2 = remote.score2 === null || remote.score2 === "" ? null : Number(remote.score2);
-    }
+    match.score1 = notStarted || remote.score1 === null || remote.score1 === ''
+      ? null
+      : remote.score1 !== undefined
+        ? Number(remote.score1)
+        : match.score1;
+    match.score2 = notStarted || remote.score2 === null || remote.score2 === ''
+      ? null
+      : remote.score2 !== undefined
+        ? Number(remote.score2)
+        : match.score2;
 
     if (remote.status !== undefined) match.status = remote.status;
-    if (remote.elapsed !== undefined) match.elapsed = remote.elapsed;
+    if (remote.elapsed !== undefined) match.elapsed = notStarted ? '' : remote.elapsed;
     if (remote.homeScorers !== undefined) match.homeScorers = remote.homeScorers;
     if (remote.awayScorers !== undefined) match.awayScorers = remote.awayScorers;
     if (remote.events !== undefined) match.events = remote.events;
@@ -590,29 +600,13 @@ function findYouTubeLiveForMatch(match) {
 }
 
 function getLastFinishedMatch() {
-  const now = new Date();
-
   return DATA.matches
-    .filter((match) => {
-      const status = String(match.status || "").toLowerCase();
-      const start = makeDate(match);
-
-      return status.includes("final") ||
-        (start < now && !isLiveMatch(match));
-    })
+    .filter((match) => isFinishedStatus(match))
     .sort((a, b) => makeDate(b) - makeDate(a))[0] || null;
 }
 
 function getFinishedMatchCount() {
-  const now = new Date();
-
-  return DATA.matches.filter((match) => {
-    const status = String(match.status || "").toLowerCase();
-    const start = makeDate(match);
-
-    return status.includes("final") ||
-      (start < now && !isLiveMatch(match));
-  }).length;
+  return DATA.matches.filter((match) => isFinishedStatus(match)).length;
 }
 
 function renderLastFinishedMatch(match) {
@@ -744,27 +738,12 @@ function renderLiveYouTubeStream(video) {
 
 function currentFootballSourceLabel() {
   const source = state.dataSource || {};
-  const name = String(source.name || "").trim();
-
-  if (!name) {
-    return "Fonte aguardando sincronização";
-  }
-
-  if (name === "Football-Data.org") {
-    return "Football-Data.org · dados com atraso";
-  }
-
-  if (source.mode === "fallback") {
-    return `${name} · fonte alternativa`;
-  }
-
-  return name;
+  return String(source.name || 'worldcup26.ir');
 }
 
 function renderUpcomingGamesSection() {
-  const now = new Date();
   const upcoming = DATA.matches
-    .filter((match) => makeDate(match) > now)
+    .filter((match) => isFutureScheduledMatch(match))
     .sort((a, b) => makeDate(a) - makeDate(b))
     .slice(0, 2);
 
@@ -1280,58 +1259,48 @@ function normalizeEventTeamName(value) {
     .toLowerCase();
 }
 
-function getLiveClock(match) {
-  const sourceStatus = String(match.sourceStatus || '').toUpperCase();
+function isLiveDataStale(match) {
+  const updatedAt = String(match && match.sourceUpdatedAt || '').trim();
 
-  if (
-    sourceStatus === 'PAUSED' ||
-    String(match.elapsed || '').toUpperCase() === 'INTERVALO'
-  ) {
+  if (!updatedAt) {
+    return false;
+  }
+
+  const timestamp = new Date(updatedAt).getTime();
+
+  if (!Number.isFinite(timestamp)) {
+    return false;
+  }
+
+  return Date.now() - timestamp > 4 * 60 * 1000;
+}
+
+function getLiveClock(match) {
+  if (isLiveDataStale(match)) {
+    return {
+      label: 'ATUALIZANDO',
+      approximate: false
+    };
+  }
+
+  const sourceStatus = String(match.sourceStatus || '').toUpperCase();
+  const elapsed = String(match.elapsed || '').toUpperCase();
+
+  if (sourceStatus === 'PAUSED' || elapsed === 'INTERVALO') {
     return {
       label: 'INTERVALO',
       approximate: false
     };
   }
 
-  const official = formatElapsed(match.elapsed);
-
-  if (official) {
-    return {
-      label: official,
-      approximate: false
-    };
-  }
-
   return {
-    label: calculateScheduledLiveClock(match),
-    approximate: true
+    label: formatElapsed(match.elapsed),
+    approximate: false
   };
 }
 
-function calculateScheduledLiveClock(match, nowValue) {
-  const start = makeDate(match);
-  const now = nowValue instanceof Date ? nowValue : new Date();
-  const elapsedMinutes = Math.floor(
-    (now.getTime() - start.getTime()) / 60000
-  );
-
-  if (!Number.isFinite(elapsedMinutes) || elapsedMinutes < 0) {
-    return '';
-  }
-
-  if (elapsedMinutes < 45) {
-    return `${Math.max(1, elapsedMinutes + 1)}'`;
-  }
-
-  if (elapsedMinutes < 60) {
-    return 'INTERVALO';
-  }
-
-  if (elapsedMinutes <= 105) {
-    return `${Math.min(90, elapsedMinutes - 14)}'`;
-  }
-
-  return "90+'";
+function calculateScheduledLiveClock() {
+  return '';
 }
 
 function liveStatusLabel(match) {
@@ -1728,6 +1697,10 @@ function formatElapsed(value) {
     normalized === "IN_PLAY"
   ) {
     return "";
+  }
+
+  if (/^\d{1,3}:\d{2}$/.test(raw)) {
+    return raw;
   }
 
   if (/^\d{1,3}(?:\+\d{1,2})?$/.test(raw.replace(/['’]/g, ""))) {
@@ -2231,26 +2204,35 @@ function isRoundLocked(round) {
 }
 
 function isLiveMatch(match) {
-  const status = String(match.status || "").toLowerCase();
-  const elapsed = String(match.elapsed || "").toLowerCase();
+  const status = String(match && match.status || '').toLowerCase();
+  const sourceStatus = String(match && match.sourceStatus || '').toLowerCase();
+  const elapsed = String(match && match.elapsed || '').toLowerCase();
 
-  if (status.includes("vivo") || status.includes("live") || status.includes("andamento")) {
-    return true;
-  }
-
-  if (elapsed && !["notstarted", "not_started", "scheduled", "ns"].includes(elapsed) && !elapsed.includes("final") && elapsed !== "ft") {
-    return true;
-  }
-
-  if (status.includes("final")) {
+  if (isFinishedStatus(match)) {
     return false;
   }
 
-  const start = makeDate(match);
-  const end = new Date(start.getTime() + 2.5 * 60 * 60 * 1000);
-  const now = new Date();
+  if (
+    status.includes('vivo') ||
+    status.includes('live') ||
+    status.includes('andamento') ||
+    sourceStatus.includes('in_play') ||
+    sourceStatus.includes('in play') ||
+    sourceStatus.includes('paused') ||
+    sourceStatus.includes('extra_time') ||
+    sourceStatus.includes('penalty')
+  ) {
+    return true;
+  }
 
-  return now >= start && now <= end;
+  return /^\d{1,3}(?:\+\d{1,2})?$/.test(
+    elapsed.replace(/['’]/g, '')
+  ) || [
+    'intervalo',
+    'prorrogação',
+    'penaltis',
+    'pênaltis'
+  ].includes(elapsed);
 }
 
 function makeDate(match) {
@@ -2391,36 +2373,23 @@ function formatPick(pick) {
 }
 
 function isFutureScheduledMatch(match) {
-  if (!match) {
+  if (!match || isLiveMatch(match) || isFinishedStatus(match)) {
     return false;
   }
 
-  if (isLiveMatch(match) || isFinishedStatus(match)) {
-    return false;
-  }
+  const text = [
+    match.status,
+    match.sourceStatus,
+    match.elapsed
+  ].join(' ').toLowerCase();
 
-  const start = makeDate(match);
-  const now = new Date();
-  const status = String(match.status || '').toLowerCase();
-  const sourceStatus = String(match.sourceStatus || '').toLowerCase();
-  const elapsed = String(match.elapsed || '').toLowerCase();
-
-  if (start > now) {
-    return true;
-  }
-
-  return status.includes('scheduled') ||
-    status.includes('timed') ||
-    status.includes('not started') ||
-    status.includes('not_started') ||
-    sourceStatus.includes('scheduled') ||
-    sourceStatus.includes('timed') ||
-    sourceStatus.includes('not started') ||
-    sourceStatus.includes('not_started') ||
-    elapsed === 'notstarted' ||
-    elapsed === 'not_started' ||
-    elapsed === 'scheduled' ||
-    elapsed === 'ns';
+  return text.includes('pendente') ||
+    text.includes('notstarted') ||
+    text.includes('not_started') ||
+    text.includes('not started') ||
+    text.includes('scheduled') ||
+    text.includes('timed') ||
+    text.includes(' ns ');
 }
 
 function isFinishedStatus(match) {
