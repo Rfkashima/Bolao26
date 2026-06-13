@@ -278,8 +278,25 @@ function mergeMatches(list) {
     const match = DATA.matches.find((item) => item.id === remote.id || item.id === remote.matchId);
     if (!match) return;
 
-    if (remote.score1 !== undefined) match.score1 = remote.score1 === null || remote.score1 === "" ? null : Number(remote.score1);
-    if (remote.score2 !== undefined) match.score2 = remote.score2 === null || remote.score2 === "" ? null : Number(remote.score2);
+    const remoteStatus = String(remote.status || remote.sourceStatus || '').toLowerCase();
+    const remoteElapsed = String(remote.elapsed || '').toLowerCase();
+    const notStarted = remoteStatus.includes('scheduled') ||
+      remoteStatus.includes('timed') ||
+      remoteStatus.includes('not_started') ||
+      remoteStatus.includes('not started') ||
+      remoteElapsed === 'notstarted' ||
+      remoteElapsed === 'not_started' ||
+      remoteElapsed === 'scheduled' ||
+      remoteElapsed === 'ns';
+
+    if (notStarted && makeDate(match) > new Date()) {
+      match.score1 = null;
+      match.score2 = null;
+    } else {
+      if (remote.score1 !== undefined) match.score1 = remote.score1 === null || remote.score1 === "" ? null : Number(remote.score1);
+      if (remote.score2 !== undefined) match.score2 = remote.score2 === null || remote.score2 === "" ? null : Number(remote.score2);
+    }
+
     if (remote.status !== undefined) match.status = remote.status;
     if (remote.elapsed !== undefined) match.elapsed = remote.elapsed;
     if (remote.homeScorers !== undefined) match.homeScorers = remote.homeScorers;
@@ -1328,46 +1345,97 @@ function liveStatusLabel(match) {
 }
 
 function liveGoals(match) {
-  const home = normalizeGoalList(match.homeScorers, match.team1);
-  const away = normalizeGoalList(match.awayScorers, match.team2);
-  const eventGoals = normalizeGoalList(match.events, "")
+  const eventGoals = {
+    home: [],
+    away: []
+  };
+
+  const scorerGoals = {
+    home: [],
+    away: []
+  };
+
+  normalizeGoalList(match.events, "")
     .filter((event) => {
       const type = String(event.type || "").toLowerCase();
       return type.includes("gol") || type.includes("goal");
+    })
+    .forEach((goal) => {
+      const player = cleanGoalPlayer(goal.player || goal.label || "");
+      const minute = cleanGoalMinute(goal.minute);
+      const side = eventTeamSide(goal.team, match);
+
+      if (!player || !minute) {
+        return;
+      }
+
+      eventGoals[side].push(Object.assign({}, goal, {
+        player,
+        minute,
+        team: side === "away" ? match.team2 : match.team1,
+        sourcePriority: 2
+      }));
     });
 
-  const merged = home.concat(away, eventGoals);
-  const goals = [];
-  const seen = new Set();
-
-  merged.forEach((goal) => {
-    const player = cleanGoalPlayer(goal.player);
+  normalizeGoalList(match.homeScorers, match.team1).forEach((goal) => {
+    const player = cleanGoalPlayer(goal.player || goal.label || "");
     const minute = cleanGoalMinute(goal.minute);
-    const side = eventTeamSide(goal.team, match);
-    const key = [
-      normalizeEventTeamName(player),
-      minute,
-      side
-    ].join("|");
 
-    if (!player && !minute) {
+    if (!player || !minute) {
       return;
     }
 
-    if (seen.has(key)) {
-      return;
-    }
-
-    seen.add(key);
-    goals.push(Object.assign({}, goal, {
+    scorerGoals.home.push(Object.assign({}, goal, {
       player,
       minute,
-      team: side === "away" ? match.team2 : match.team1
+      team: match.team1,
+      sourcePriority: 1
     }));
   });
 
-  appendMissingScoreGoals(goals, match, "home");
-  appendMissingScoreGoals(goals, match, "away");
+  normalizeGoalList(match.awayScorers, match.team2).forEach((goal) => {
+    const player = cleanGoalPlayer(goal.player || goal.label || "");
+    const minute = cleanGoalMinute(goal.minute);
+
+    if (!player || !minute) {
+      return;
+    }
+
+    scorerGoals.away.push(Object.assign({}, goal, {
+      player,
+      minute,
+      team: match.team2,
+      sourcePriority: 1
+    }));
+  });
+
+  const goals = [];
+
+  ["home", "away"].forEach((side) => {
+    const targetScore = matchScoreForSide(match, side);
+
+    if (targetScore <= 0) {
+      return;
+    }
+
+    /*
+     * Regra principal:
+     * - se houver evento real em match.events para o lado, usa só match.events;
+     * - homeScorers/awayScorers entram apenas quando NÃO existe evento real.
+     *
+     * Isso impede que um dado antigo/errado como "C. Larin 11'"
+     * seja misturado com o evento correto "C. Larin 79'".
+     */
+    const source = eventGoals[side].length
+      ? eventGoals[side]
+      : scorerGoals[side];
+
+    uniqueGoalsForSide(source, side)
+      .slice(0, targetScore)
+      .forEach((goal) => {
+        goals.push(goal);
+      });
+  });
 
   return goals.sort((a, b) => {
     return Number(a.minute || 999) - Number(b.minute || 999);
@@ -1375,10 +1443,7 @@ function liveGoals(match) {
 }
 
 function appendMissingScoreGoals(goals, match, side) {
-  const targetScore = Math.max(
-    0,
-    Number(side === 'home' ? match.score1 : match.score2) || 0
-  );
+  const targetScore = matchScoreForSide(match, side);
   const team = side === 'home' ? match.team1 : match.team2;
   const known = goals.filter((goal) => {
     return eventTeamSide(goal.team, match) === side;
@@ -1393,6 +1458,64 @@ function appendMissingScoreGoals(goals, match, side) {
       generic: true
     });
   }
+}
+
+function matchScoreForSide(match, side) {
+  if (isFutureScheduledMatch(match)) {
+    return 0;
+  }
+
+  const value = side === 'home' ? match.score1 : match.score2;
+  const score = Number(value);
+
+  return Number.isFinite(score) && score > 0 ? score : 0;
+}
+
+function uniqueGoalsForSide(list, side) {
+  const byGoal = new Map();
+
+  (Array.isArray(list) ? list : []).forEach((goal) => {
+    const player = cleanGoalPlayer(goal.player || goal.label || '');
+    const minute = cleanGoalMinute(goal.minute);
+    const playerKey = normalizeEventTeamName(player);
+    const minuteKey = minute || 'sem-minuto';
+    const key = playerKey
+      ? `${playerKey}-${minuteKey}`
+      : `${side}-${minuteKey}`;
+    const normalized = Object.assign({}, goal, {
+      player,
+      minute
+    });
+    const current = byGoal.get(key);
+
+    if (
+      !current ||
+      goalCandidateRank(normalized) > goalCandidateRank(current)
+    ) {
+      byGoal.set(key, normalized);
+    }
+  });
+
+  return Array.from(byGoal.values())
+    .filter((goal) => {
+      return cleanGoalPlayer(goal.player || goal.label || '') ||
+        cleanGoalMinute(goal.minute);
+    })
+    .sort((a, b) => {
+      return goalCandidateRank(b) - goalCandidateRank(a);
+    });
+}
+
+function goalCandidateRank(goal) {
+  const minute = Number(cleanGoalMinute(goal.minute) || 0);
+  const hasPlayer = cleanGoalPlayer(goal.player || goal.label || '') ? 1 : 0;
+  const hasMinute = minute > 0 ? 1 : 0;
+  const genericPenalty = goal.generic ? -100000 : 0;
+
+  return genericPenalty +
+    hasPlayer * 10000 +
+    hasMinute * 1000 +
+    minute;
 }
 
 function matchSubstitutions(match) {
@@ -1997,7 +2120,8 @@ function buildRanking(excludedMatchId = "") {
 function getLastRankedMatch() {
   return DATA.matches
     .filter((match) => {
-      return match.score1 !== null &&
+      return !isFutureScheduledMatch(match) &&
+        match.score1 !== null &&
         match.score1 !== undefined &&
         match.score2 !== null &&
         match.score2 !== undefined;
@@ -2006,16 +2130,21 @@ function getLastRankedMatch() {
 }
 
 function scorePick(pick, match) {
-  if (!pick || match.score1 === null || match.score2 === null) {
+  if (!pick ||
+    isFutureScheduledMatch(match) ||
+    match.score1 === null ||
+    match.score1 === undefined ||
+    match.score2 === null ||
+    match.score2 === undefined) {
     return { points: 0, exact: false, result: false };
   }
 
   if (pick.g1 === match.score1 && pick.g2 === match.score2) {
-    return { points: DATA.settings.exactScorePoints, exact: true, result: false };
+    return { points: 3, exact: true, result: true };
   }
 
   if (outcome(pick.g1, pick.g2) === outcome(match.score1, match.score2)) {
-    return { points: DATA.settings.resultPoints, exact: false, result: true };
+    return { points: 1, exact: false, result: true };
   }
 
   return { points: 0, exact: false, result: false };
@@ -2045,7 +2174,7 @@ function calculateGroupStandings() {
   });
 
   DATA.matches
-    .filter((m) => groupStageRounds.includes(m.round) && m.score1 !== null && m.score2 !== null)
+    .filter((m) => groupStageRounds.includes(m.round) && !isFutureScheduledMatch(m) && m.score1 !== null && m.score2 !== null)
     .forEach((m) => {
       const groupId = String(m.group || "").replace("Grupo ", "");
       const table = standings[groupId];
@@ -2261,8 +2390,61 @@ function formatPick(pick) {
   return `${pick.g1} x ${pick.g2}`;
 }
 
+function isFutureScheduledMatch(match) {
+  if (!match) {
+    return false;
+  }
+
+  if (isLiveMatch(match) || isFinishedStatus(match)) {
+    return false;
+  }
+
+  const start = makeDate(match);
+  const now = new Date();
+  const status = String(match.status || '').toLowerCase();
+  const sourceStatus = String(match.sourceStatus || '').toLowerCase();
+  const elapsed = String(match.elapsed || '').toLowerCase();
+
+  if (start > now) {
+    return true;
+  }
+
+  return status.includes('scheduled') ||
+    status.includes('timed') ||
+    status.includes('not started') ||
+    status.includes('not_started') ||
+    sourceStatus.includes('scheduled') ||
+    sourceStatus.includes('timed') ||
+    sourceStatus.includes('not started') ||
+    sourceStatus.includes('not_started') ||
+    elapsed === 'notstarted' ||
+    elapsed === 'not_started' ||
+    elapsed === 'scheduled' ||
+    elapsed === 'ns';
+}
+
+function isFinishedStatus(match) {
+  const text = [
+    match && match.status,
+    match && match.sourceStatus,
+    match && match.elapsed
+  ].join(' ').toLowerCase();
+
+  return text.includes('final') ||
+    text.includes('finished') ||
+    text.includes('encerrado') ||
+    text.includes('ft');
+}
+
 function matchResultInline(match) {
-  if (match.score1 === null || match.score2 === null) {
+  if (isFutureScheduledMatch(match)) {
+    return "x";
+  }
+
+  if (match.score1 === null ||
+    match.score1 === undefined ||
+    match.score2 === null ||
+    match.score2 === undefined) {
     return isLiveMatch(match) ? "AO VIVO" : "x";
   }
 
