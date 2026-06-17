@@ -17,6 +17,7 @@ const state = {
   playerCode: localStorage.getItem("bolao-player-code") || "",
   betRound: localStorage.getItem("bolao-bet-round") || "Rodada 1",
   picksRound: localStorage.getItem("bolao-picks-round") || "Rodada 1",
+  picksMatchIndexByRound: {},
   loadedBackend: false,
   saveInFlight: false
 };
@@ -170,9 +171,19 @@ function setActiveTab() {
 
 function scheduleInitialBackendLoad() {
   window.requestAnimationFrame(() => {
-    window.setTimeout(() => {
+    window.setTimeout(async () => {
       window.scrollTo({ top: 0, left: 0, behavior: "instant" });
-      loadBackendState(false, "initial").catch(() => {});
+
+      /*
+       * Primeiro traz ranking, palpites e jogos já persistidos no cache do
+       * Apps Script. A consulta externa do jogo ao vivo ocorre logo depois,
+       * sem bloquear o restante da página.
+       */
+      await loadBackendState(false, "fast").catch(() => null);
+
+      if (shouldUseLiveRefresh()) {
+        await loadBackendState(true, "live").catch(() => null);
+      }
     }, 0);
   });
 }
@@ -708,7 +719,7 @@ function renderHomeMatchPicksSection() {
   return `
     <section class="card home-match-picks-section">
       <div class="title-row">
-        <h2>🎯 Palpites dos jogadores</h2>
+        <h2>🎯 Palpites</h2>
         <span class="kicker">${isLive ? "Jogo ao vivo" : isUpcoming ? "Próximo jogo" : "Último jogo"}</span>
       </div>
 
@@ -820,16 +831,12 @@ function liveGameCard(match) {
 }
 
 function liveMatchLine(match) {
-  const clock = getLiveClock(match);
   const homeScore = match.score1 === null || match.score1 === undefined
     ? "0"
     : String(match.score1);
   const awayScore = match.score2 === null || match.score2 === undefined
     ? "0"
     : String(match.score2);
-  const center = clock
-    ? `<div class="live-score-clock">${escapeHtml(clock)}</div>`
-    : '<div class="live-score-divider" aria-hidden="true">×</div>';
 
   return `
     <div class="live-scoreboard">
@@ -839,7 +846,7 @@ function liveMatchLine(match) {
 
       <strong class="live-score-number">${homeScore}</strong>
 
-      ${center}
+      <div class="live-score-divider" aria-hidden="true">×</div>
 
       <strong class="live-score-number">${awayScore}</strong>
 
@@ -901,7 +908,7 @@ function renderLastFinishedMatch(match) {
 
         <div class="last-match-footer">
           <span>${escapeHtml(match.venue || "")}</span>
-          <span>${escapeHtml(match.source || 'worldcup26.ir')}</span>
+          <span>${escapeHtml(match.source || 'Football-Data.org')}</span>
         </div>
       </div>
     </section>
@@ -996,7 +1003,7 @@ function renderSponsorBlock(compact = false) {
         </div>
       </div>
       <div class="data-provider-credit">
-        Dados de futebol: worldcup26.ir e Football-Data.org.
+        Dados de futebol ao vivo: Football-Data.org.
       </div>
     </a>
   `;
@@ -1271,37 +1278,6 @@ function normalizeEventTeamName(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9]/g, "")
     .toLowerCase();
-}
-
-function isLiveDataStale(match) {
-  const updatedAt = String(match && match.sourceUpdatedAt || '').trim();
-
-  if (!updatedAt) {
-    return false;
-  }
-
-  const timestamp = new Date(updatedAt).getTime();
-
-  if (!Number.isFinite(timestamp)) {
-    return false;
-  }
-
-  return Date.now() - timestamp > 4 * 60 * 1000;
-}
-
-function getLiveClock(match) {
-  if (isLiveDataStale(match)) {
-    return "";
-  }
-
-  const sourceStatus = String(match.sourceStatus || '').toUpperCase();
-  const elapsed = String(match.elapsed || '').toUpperCase();
-
-  if (sourceStatus === 'PAUSED' || elapsed === 'INTERVALO') {
-    return 'INTERVALO';
-  }
-
-  return formatElapsed(match.elapsed);
 }
 
 function liveGoals(match) {
@@ -1622,40 +1598,6 @@ function parseGoalText(text, team) {
   };
 }
 
-function formatElapsed(value) {
-  const raw = String(value || "").trim();
-  const normalized = raw.toUpperCase();
-
-  if (
-    !raw ||
-    normalized === "NOTSTARTED" ||
-    normalized === "LIVE" ||
-    normalized === "AO VIVO" ||
-    normalized === "IN PLAY" ||
-    normalized === "IN_PLAY"
-  ) {
-    return "";
-  }
-
-  if (/^\d{1,3}:\d{2}$/.test(raw)) {
-    return raw;
-  }
-
-  if (/^\d{1,3}(?:\+\d{1,2})?$/.test(raw.replace(/['’]/g, ""))) {
-    return `${raw.replace(/['’]/g, "")}'`;
-  }
-
-  if (
-    normalized === "INTERVALO" ||
-    normalized === "PRORROGAÇÃO" ||
-    normalized === "PÊNALTIS"
-  ) {
-    return normalized;
-  }
-
-  return "";
-}
-
 function gameCard(match) {
   return `
     <div class="game-card">
@@ -1777,30 +1719,84 @@ function betRow(match, playerId, locked) {
   `;
 }
 
+function defaultPicksMatchIndex(matches) {
+  if (!Array.isArray(matches) || !matches.length) return 0;
+
+  const liveIndex = matches.findIndex((match) => isLiveMatch(match));
+  if (liveIndex >= 0) return liveIndex;
+
+  const now = Date.now();
+  const nextIndex = matches.findIndex((match) => {
+    const kickoff = makeDate(match).getTime();
+    return Number.isFinite(kickoff) && kickoff >= now;
+  });
+
+  return nextIndex >= 0 ? nextIndex : matches.length - 1;
+}
+
+function getPicksMatchIndex(round, matches) {
+  const stored = Number(state.picksMatchIndexByRound[round]);
+
+  if (Number.isInteger(stored)) {
+    return Math.max(0, Math.min(stored, Math.max(0, matches.length - 1)));
+  }
+
+  const initial = defaultPicksMatchIndex(matches);
+  state.picksMatchIndexByRound[round] = initial;
+  return initial;
+}
+
 function renderPicksSection() {
   const round = rounds.includes(state.picksRound) ? state.picksRound : rounds[0];
-  const matches = DATA.matches.filter((m) => m.round === round);
+  const matches = DATA.matches
+    .filter((match) => match.round === round)
+    .sort((a, b) => makeDate(a) - makeDate(b));
   const shouldHide = !DATA.settings.showPicksBeforeDeadline && !isRoundLocked(round);
+  const activeIndex = getPicksMatchIndex(round, matches);
+  const match = matches[activeIndex] || null;
 
   return `
-    <section class="card">
+    <section class="card picks-browser-card">
       <div class="title-row">
         <h2>👀 Palpites enviados</h2>
-        <span class="kicker">Por fase/rodada</span>
+        <span class="kicker">Por jogo</span>
       </div>
 
-      <div class="toolbar">
+      <div class="toolbar picks-toolbar">
         <div class="field">
           <label>Rodada/fase</label>
           <select id="picksRoundSelect">
-            ${rounds.map((r) => `<option value="${r}" ${r === round ? "selected" : ""}>${displayRound(r)}</option>`).join("")}
+            ${rounds.map((item) => `<option value="${item}" ${item === round ? "selected" : ""}>${displayRound(item)}</option>`).join("")}
           </select>
         </div>
       </div>
 
-      <div class="picks-list">
-        ${matches.map((match) => `
-          <div class="pick-card">
+      ${match ? `
+        <div class="picks-game-navigation" aria-label="Navegação entre jogos">
+          <button
+            type="button"
+            class="picks-nav-button"
+            id="previousPicksGame"
+            aria-label="Mostrar jogo anterior"
+            ${activeIndex <= 0 ? "disabled" : ""}
+          >←</button>
+
+          <div class="picks-game-position" aria-live="polite">
+            <strong>Jogo ${activeIndex + 1} de ${matches.length}</strong>
+            <span>${displayRound(round)}</span>
+          </div>
+
+          <button
+            type="button"
+            class="picks-nav-button"
+            id="nextPicksGame"
+            aria-label="Mostrar próximo jogo"
+            ${activeIndex >= matches.length - 1 ? "disabled" : ""}
+          >→</button>
+        </div>
+
+        <div class="picks-list picks-list-single">
+          <div class="pick-card picks-active-game" data-picks-match-index="${activeIndex}">
             <div class="pick-top">
               <span>${match.group} · Jogo ${match.number}</span>
               <span>${formatDate(match.date)} · ${match.time}</span>
@@ -1819,8 +1815,8 @@ function renderPicksSection() {
               }).join("")}
             </div>
           </div>
-        `).join("")}
-      </div>
+        </div>
+      ` : '<div class="info-box">Nenhum jogo cadastrado nesta rodada.</div>'}
     </section>
   `;
 }
@@ -1859,7 +1855,28 @@ function bindEvents() {
   if (picksRoundSelect) {
     picksRoundSelect.addEventListener("change", (event) => {
       state.picksRound = event.target.value;
+      delete state.picksMatchIndexByRound[state.picksRound];
       localStorage.setItem("bolao-picks-round", state.picksRound);
+      render();
+    });
+  }
+
+  const previousPicksGame = $("#previousPicksGame");
+  const nextPicksGame = $("#nextPicksGame");
+
+  if (previousPicksGame) {
+    previousPicksGame.addEventListener("click", () => {
+      const current = Number(state.picksMatchIndexByRound[state.picksRound] || 0);
+      state.picksMatchIndexByRound[state.picksRound] = Math.max(0, current - 1);
+      render();
+    });
+  }
+
+  if (nextPicksGame) {
+    nextPicksGame.addEventListener("click", () => {
+      const total = DATA.matches.filter((match) => match.round === state.picksRound).length;
+      const current = Number(state.picksMatchIndexByRound[state.picksRound] || 0);
+      state.picksMatchIndexByRound[state.picksRound] = Math.min(Math.max(0, total - 1), current + 1);
       render();
     });
   }
@@ -2321,6 +2338,29 @@ function compactCountry(name) {
 }
 
 function flagMarkup(name) {
+  if (name === "Inglaterra") {
+    return `
+      <span class="flag-native flag-svg" role="img" aria-label="Bandeira da Inglaterra">
+        <svg viewBox="0 0 60 36" aria-hidden="true" focusable="false">
+          <rect width="60" height="36" fill="#ffffff"></rect>
+          <rect x="25" width="10" height="36" fill="#ce1124"></rect>
+          <rect y="13" width="60" height="10" fill="#ce1124"></rect>
+        </svg>
+      </span>
+    `;
+  }
+
+  if (name === "Escócia") {
+    return `
+      <span class="flag-native flag-svg" role="img" aria-label="Bandeira da Escócia">
+        <svg viewBox="0 0 60 36" aria-hidden="true" focusable="false">
+          <rect width="60" height="36" fill="#0065bd"></rect>
+          <path d="M-4 0 L4 0 L64 36 L56 36 Z M56 0 L64 0 L4 36 L-4 36 Z" fill="#ffffff"></path>
+        </svg>
+      </span>
+    `;
+  }
+
   const flag = FLAGS[name] || "🏳️";
   return `<span class="flag-native" role="img" aria-label="${escapeHtml(name)}">${flag}</span>`;
 }
