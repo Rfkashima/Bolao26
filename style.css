@@ -86,17 +86,6 @@ h1{
   text-shadow: 0 10px 26px rgba(15,23,42,.10);
 }
 
-.hero-status{
-  display: grid;
-  justify-items: end;
-  gap: 3px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 850;
-  white-space: nowrap;
-}
-
-.status-pill,
 .pill{
   display: inline-flex;
   align-items: center;
@@ -111,21 +100,18 @@ h1{
   white-space: nowrap;
 }
 
-.status-pill.success,
 .pill.success{
   color: var(--green);
   border-color: #a7f3d0;
   background: rgba(236,253,245,.9);
 }
 
-.status-pill.warning,
 .pill.warning{
   color: var(--amber);
   border-color: #fed7aa;
   background: rgba(255,247,237,.9);
 }
 
-.status-pill.danger,
 .pill.danger{
   color: var(--red);
   border-color: #fecaca;
@@ -793,20 +779,6 @@ tr:last-child td{
     line-height: .9;
   }
 
-  .hero-status{
-    gap: 2px;
-    font-size: 9px;
-  }
-
-  .hero-status > span:not(.status-pill){
-    display: none;
-  }
-
-  .status-pill{
-    padding: 4px 7px;
-    font-size: 9px;
-  }
-
   .main-tabs{
     gap: 6px;
     padding-left: 8px;
@@ -851,10 +823,6 @@ tr:last-child td{
   .hero{
     padding: 14px clamp(18px, 4vw, 42px);
     border-radius: 0;
-  }
-
-  .hero-status{
-    font-size: 13px;
   }
 
   .main-tabs{
@@ -987,24 +955,6 @@ tr:last-child td{
   display: none !important;
 }
 
-.hero-status{
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 2;
-}
-
-.hero-status > span:not(.status-pill){
-  display: none;
-}
-
-.status-pill{
-  border-color: rgba(34,255,74,.55);
-  background: rgba(2, 12, 7, .72);
-  color: var(--world-green);
-  box-shadow: 0 0 18px rgba(34,255,74,.18);
-}
-
 
 /* Navegação inferior corrigida */
 .main-tabs{
@@ -1096,16 +1046,6 @@ tr:last-child td{
   .hero{
     min-height: 156px;
     background-position: center top;
-  }
-
-  .hero-status{
-    top: 8px;
-    right: 8px;
-  }
-
-  .status-pill{
-    padding: 4px 8px;
-    font-size: 9px;
   }
 
   .main-tabs{
@@ -1249,7 +1189,7 @@ tr:nth-child(even) td{
 }
 
 
-/* Football-Data.org */
+/* Fonte de dados esportivos */
 .data-provider-credit{
   margin-top: 9px;
   border-top: 1px solid rgba(0,167,255,.18);
@@ -1701,8 +1641,14 @@ tr:nth-child(even) td{
   line-height: 1;
 }
 
+.live-score-center{
+  display: grid;
+  place-items: center;
+  gap: 3px;
+}
+
 .live-score-divider{
-  min-height: 22px;
+  min-height: 14px;
   color: #ffffff;
   text-align: center;
   font-size: 13px;
@@ -1710,6 +1656,21 @@ tr:nth-child(even) td{
   white-space: nowrap;
 }
 
+.live-clock{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 999px;
+  padding: 2px 5px;
+  background: rgba(255,255,255,.06);
+  color: #d9e6f5;
+  font-size: 9px;
+  font-weight: 1000;
+  line-height: 1.2;
+  white-space: nowrap;
+}
 
 .live-event-list{
   display: grid;
@@ -2208,4 +2169,70 @@ tr:nth-child(even) td{
 .group-card{
   content-visibility: auto;
   contain-intrinsic-size: 420px;
+}
+
+#home-ranking-slot{
+  min-width: 0;
+  height: 100%;
+}
+
+#home-ranking-slot > .home-ranking-card{
+  height: 100%;
+}
+
+
+.live-match-stats{
+  display: grid;
+  gap: 4px;
+  margin-top: 9px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  padding-top: 8px;
+}
+
+.live-match-stats-title{
+  color: #b8c8da;
+  font-size: 9px;
+  font-weight: 1000;
+  letter-spacing: .08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.live-match-stat-row{
+  display: grid;
+  grid-template-columns: 48px minmax(0,1fr) 48px;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  color: #d8e4f2;
+  font-size: 10px;
+  text-align: center;
+}
+
+.live-match-stat-row strong{
+  color: #fff;
+  font-size: 11px;
+  font-weight: 1000;
+}
+
+.live-match-stat-row strong:first-child{
+  text-align: right;
+}
+
+.live-match-stat-row strong:last-child{
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .live-clock{
+    min-width: 34px;
+    padding-inline: 3px;
+    font-size: 8px;
+  }
+
+  .live-match-stat-row{
+    grid-template-columns: 38px minmax(0,1fr) 38px;
+    gap: 5px;
+    font-size: 9px;
+  }
 }
