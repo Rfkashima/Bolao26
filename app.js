@@ -17,7 +17,8 @@ const state = {
   playerCode: localStorage.getItem("bolao-player-code") || "",
   betRound: localStorage.getItem("bolao-bet-round") || "Rodada 1",
   picksRound: localStorage.getItem("bolao-picks-round") || "Rodada 1",
-  picksMatchIndexByRound: {},
+  homePicksMatchId: "",
+  homePicksManual: false,
   loadedBackend: false,
   saveInFlight: false
 };
@@ -55,55 +56,55 @@ const SHORT_COUNTRY_NAMES = {
   "Nova Zelândia": "N. Zelândia"
 };
 
-const FLAGS = {
-  "África do Sul": "🇿🇦",
-  "Coreia do Sul": "🇰🇷",
-  "México": "🇲🇽",
-  "República Tcheca": "🇨🇿",
-  "Bósnia": "🇧🇦",
-  "Canadá": "🇨🇦",
-  "Catar": "🇶🇦",
-  "Suíça": "🇨🇭",
-  "Brasil": "🇧🇷",
-  "Escócia": "🏴",
-  "Haiti": "🇭🇹",
-  "Marrocos": "🇲🇦",
-  "Austrália": "🇦🇺",
-  "Estados Unidos": "🇺🇸",
-  "Paraguai": "🇵🇾",
-  "Turquia": "🇹🇷",
-  "Alemanha": "🇩🇪",
-  "Costa do Marfim": "🇨🇮",
-  "Curaçao": "🇨🇼",
-  "Equador": "🇪🇨",
-  "Holanda": "🇳🇱",
-  "Japão": "🇯🇵",
-  "Suécia": "🇸🇪",
-  "Tunísia": "🇹🇳",
-  "Bélgica": "🇧🇪",
-  "Egito": "🇪🇬",
-  "Irã": "🇮🇷",
-  "Nova Zelândia": "🇳🇿",
-  "Arábia Saudita": "🇸🇦",
-  "Cabo Verde": "🇨🇻",
-  "Espanha": "🇪🇸",
-  "Uruguai": "🇺🇾",
-  "França": "🇫🇷",
-  "Iraque": "🇮🇶",
-  "Noruega": "🇳🇴",
-  "Senegal": "🇸🇳",
-  "Argélia": "🇩🇿",
-  "Argentina": "🇦🇷",
-  "Áustria": "🇦🇹",
-  "Jordânia": "🇯🇴",
-  "Colômbia": "🇨🇴",
-  "RD Congo": "🇨🇩",
-  "Portugal": "🇵🇹",
-  "Uzbequistão": "🇺🇿",
-  "Croácia": "🇭🇷",
-  "Gana": "🇬🇭",
-  "Inglaterra": "🏴",
-  "Panamá": "🇵🇦"
+const FLAG_POSITIONS = {
+  "África do Sul": [0, 0],
+  "Coreia do Sul": [1, 0],
+  "México": [2, 0],
+  "República Tcheca": [3, 0],
+  "Bósnia": [4, 0],
+  "Canadá": [5, 0],
+  "Catar": [6, 0],
+  "Suíça": [7, 0],
+  "Brasil": [0, 1],
+  "Escócia": [1, 1],
+  "Haiti": [2, 1],
+  "Marrocos": [3, 1],
+  "Austrália": [4, 1],
+  "Estados Unidos": [5, 1],
+  "Paraguai": [6, 1],
+  "Turquia": [7, 1],
+  "Alemanha": [0, 2],
+  "Costa do Marfim": [1, 2],
+  "Curaçao": [2, 2],
+  "Equador": [3, 2],
+  "Holanda": [4, 2],
+  "Japão": [5, 2],
+  "Suécia": [6, 2],
+  "Tunísia": [7, 2],
+  "Bélgica": [0, 3],
+  "Egito": [1, 3],
+  "Irã": [2, 3],
+  "Nova Zelândia": [3, 3],
+  "Arábia Saudita": [4, 3],
+  "Cabo Verde": [5, 3],
+  "Espanha": [6, 3],
+  "Uruguai": [7, 3],
+  "França": [0, 4],
+  "Iraque": [1, 4],
+  "Noruega": [2, 4],
+  "Senegal": [3, 4],
+  "Argélia": [4, 4],
+  "Argentina": [5, 4],
+  "Áustria": [6, 4],
+  "Jordânia": [7, 4],
+  "Colômbia": [0, 5],
+  "RD Congo": [1, 5],
+  "Portugal": [2, 5],
+  "Uzbequistão": [3, 5],
+  "Croácia": [4, 5],
+  "Gana": [5, 5],
+  "Inglaterra": [6, 5],
+  "Panamá": [7, 5],
 };
 
 
@@ -294,12 +295,37 @@ function mergePicks(list) {
   });
 }
 
+function normalizeRemoteMatch(remote) {
+  if (!Array.isArray(remote)) {
+    return remote || {};
+  }
+
+  const normalized = {
+    id: remote[0],
+    score1: remote[1],
+    score2: remote[2],
+    status: remote[3]
+  };
+
+  if (remote.length > 4) normalized.elapsed = remote[4];
+  if (remote.length > 5) normalized.homeScorers = remote[5];
+  if (remote.length > 6) normalized.awayScorers = remote[6];
+  if (remote.length > 7) normalized.events = remote[7];
+  if (remote.length > 8) normalized.injuryTime = remote[8];
+  if (remote.length > 9) normalized.source = remote[9];
+  if (remote.length > 10) normalized.sourceStatus = remote[10];
+  if (remote.length > 11) normalized.sourceUpdatedAt = remote[11];
+
+  return normalized;
+}
+
 function mergeMatches(list) {
   if (!Array.isArray(list)) return;
 
-  list.forEach((remote) => {
-    const match = DATA.matches.find((item) => {
-      return item.id === remote.id || item.id === remote.matchId;
+  list.forEach((item) => {
+    const remote = normalizeRemoteMatch(item);
+    const match = DATA.matches.find((candidate) => {
+      return candidate.id === remote.id || candidate.id === remote.matchId;
     });
 
     if (!match) return;
@@ -456,17 +482,20 @@ function backendVisualSignature(payload) {
   const signature = {};
 
   if (Array.isArray(payload.matches)) {
-    signature.matches = payload.matches.map((match) => ({
-      id: match.id || match.matchId || "",
-      score1: match.score1 ?? null,
-      score2: match.score2 ?? null,
-      status: match.status || "",
-      elapsed: match.elapsed || "",
-      injuryTime: match.injuryTime || "",
-      homeScorers: match.homeScorers || [],
-      awayScorers: match.awayScorers || [],
-      events: match.events || []
-    }));
+    signature.matches = payload.matches.map((item) => {
+      const match = normalizeRemoteMatch(item);
+      return {
+        id: match.id || match.matchId || "",
+        score1: match.score1 ?? null,
+        score2: match.score2 ?? null,
+        status: match.status || "",
+        elapsed: match.elapsed || "",
+        injuryTime: match.injuryTime || "",
+        homeScorers: match.homeScorers || [],
+        awayScorers: match.awayScorers || [],
+        events: match.events || []
+      };
+    });
   }
 
   if (Array.isArray(payload.picks)) signature.picks = payload.picks;
@@ -638,6 +667,7 @@ function renderHome() {
     </div>
   `;
 
+  bindHomeEvents();
   scheduleHomeMatchTransition();
 }
 
@@ -706,8 +736,44 @@ function getHomeReferenceMatch() {
   return liveMatch || getImminentUpcomingMatch() || getLastFinishedMatch();
 }
 
+function getChronologicalMatches() {
+  return DATA.matches
+    .slice()
+    .sort((first, second) => {
+      const timeDiff = makeDate(first).getTime() - makeDate(second).getTime();
+      return timeDiff || Number(first.number || 0) - Number(second.number || 0);
+    });
+}
+
+function getHomePicksMatch() {
+  const matches = getChronologicalMatches();
+
+  if (!matches.length) {
+    return { match: null, matches, index: -1 };
+  }
+
+  let match = null;
+
+  if (state.homePicksManual && state.homePicksMatchId) {
+    match = matches.find((item) => item.id === state.homePicksMatchId) || null;
+  }
+
+  if (!match) {
+    match = getHomeReferenceMatch() || matches[0];
+    state.homePicksMatchId = match.id;
+    state.homePicksManual = false;
+  }
+
+  return {
+    match,
+    matches,
+    index: matches.findIndex((item) => item.id === match.id)
+  };
+}
+
 function renderHomeMatchPicksSection() {
-  const match = getHomeReferenceMatch();
+  const navigation = getHomePicksMatch();
+  const match = navigation.match;
 
   if (!match) {
     return "";
@@ -715,12 +781,36 @@ function renderHomeMatchPicksSection() {
 
   const isLive = isLiveMatch(match);
   const isUpcoming = !isLive && isFutureScheduledMatch(match);
+  const activeIndex = navigation.index;
+  const total = navigation.matches.length;
 
   return `
     <section class="card home-match-picks-section">
-      <div class="title-row">
+      <div class="title-row home-picks-title-row">
         <h2>🎯 Palpites</h2>
-        <span class="kicker">${isLive ? "Jogo ao vivo" : isUpcoming ? "Próximo jogo" : "Último jogo"}</span>
+        <span class="kicker">${isLive ? "Jogo ao vivo" : isUpcoming ? "Próximo jogo" : "Jogo anterior"}</span>
+      </div>
+
+      <div class="home-picks-navigation" aria-label="Navegação entre os jogos">
+        <button
+          type="button"
+          class="home-picks-nav-button"
+          id="previousHomePicksGame"
+          aria-label="Mostrar palpites do jogo anterior"
+          ${activeIndex <= 0 ? "disabled" : ""}
+        >←</button>
+
+        <span class="home-picks-position" aria-live="polite">
+          Jogo ${activeIndex + 1} de ${total}
+        </span>
+
+        <button
+          type="button"
+          class="home-picks-nav-button"
+          id="nextHomePicksGame"
+          aria-label="Mostrar palpites do próximo jogo"
+          ${activeIndex >= total - 1 ? "disabled" : ""}
+        >→</button>
       </div>
 
       <div class="pick-card">
@@ -747,6 +837,29 @@ function renderHomeMatchPicksSection() {
       </div>
     </section>
   `;
+}
+
+function bindHomeEvents() {
+  const navigation = getHomePicksMatch();
+  const previous = $("#previousHomePicksGame");
+  const next = $("#nextHomePicksGame");
+
+  const selectByOffset = (offset) => {
+    const targetIndex = Math.max(
+      0,
+      Math.min(navigation.matches.length - 1, navigation.index + offset)
+    );
+    const target = navigation.matches[targetIndex];
+
+    if (!target || target.id === navigation.match?.id) return;
+
+    state.homePicksMatchId = target.id;
+    state.homePicksManual = true;
+    renderHome();
+  };
+
+  previous?.addEventListener("click", () => selectByOffset(-1));
+  next?.addEventListener("click", () => selectByOffset(1));
 }
 
 function renderLiveSection() {
@@ -966,7 +1079,6 @@ function renderOfficial() {
   app.innerHTML = `
     <div class="stack">
       ${renderGroupsSection()}
-      ${renderKnockoutSection()}
       ${renderStatsSection()}
       ${renderSponsorBlock(true)}
     </div>
@@ -995,7 +1107,7 @@ function renderSponsorBlock(compact = false) {
       aria-label="Abrir site da IA Pro Contato"
     >
       <div class="sponsor-wrap">
-        <div class="sponsor-logo"><img src="logo-ia-pro-contato.webp" alt="IA Pro Contato" width="768" height="256" decoding="async"></div>
+        <div class="sponsor-logo"><img src="logo-ia-pro-contato.webp" alt="IA Pro Contato" width="768" height="256" loading="lazy" decoding="async"></div>
         <div class="sponsor-text">
           <div class="sponsor-label">Patrocínio</div>
           <div class="sponsor-name">IA Pro Contato</div>
@@ -1182,7 +1294,9 @@ function liveMatchDetails(match) {
 }
 
 function liveEventRow(event, match) {
-  const side = eventTeamSide(event.team, match);
+  const side = event.side === 'away' || event.side === 'home'
+    ? event.side
+    : eventTeamSide(event.team, match);
   const minute = event.minute
     ? `${escapeHtml(String(event.minute))}'`
     : "";
@@ -1281,41 +1395,71 @@ function normalizeEventTeamName(value) {
 }
 
 function liveGoals(match) {
-  const homeGoals = uniqueGoalsForSide(
-    normalizeGoalList(
-      match.homeScorers,
-      match.team1
-    ).map((goal) => {
-      return Object.assign({}, goal, {
-        team: match.team1
+  const eventGoals = normalizeGoalList(match.events, "")
+    .filter((event) => {
+      return String(event.type || "").toLowerCase().includes("gol") ||
+        String(event.type || "").toLowerCase().includes("goal");
+    })
+    .map((event) => {
+      const side = event.side === "away" || event.side === "home"
+        ? event.side
+        : eventTeamSide(event.team, match);
+
+      return Object.assign({}, event, {
+        side,
+        team: event.team || (side === "away" ? match.team2 : match.team1)
       });
+    });
+
+  if (eventGoals.length) {
+    return uniqueGoalEvents(eventGoals).sort((first, second) => {
+      return goalMinuteSortValue(first.minute) - goalMinuteSortValue(second.minute);
+    });
+  }
+
+  const homeGoals = uniqueGoalsForSide(
+    normalizeGoalList(match.homeScorers, match.team1).map((goal) => {
+      return Object.assign({}, goal, { team: match.team1 });
     }),
     "home"
   ).slice(0, matchScoreForSide(match, "home"));
 
   const awayGoals = uniqueGoalsForSide(
-    normalizeGoalList(
-      match.awayScorers,
-      match.team2
-    ).map((goal) => {
-      return Object.assign({}, goal, {
-        team: match.team2
-      });
+    normalizeGoalList(match.awayScorers, match.team2).map((goal) => {
+      return Object.assign({}, goal, { team: match.team2 });
     }),
     "away"
   ).slice(0, matchScoreForSide(match, "away"));
 
-  /*
-   * A fonte única já separa os gols por lado.
-   * Não usa match.events junto com homeScorers/awayScorers,
-   * evitando duplicação e inversão do time.
-   */
   return homeGoals
     .concat(awayGoals)
-    .sort((a, b) => {
-      return goalMinuteSortValue(a.minute) -
-        goalMinuteSortValue(b.minute);
+    .sort((first, second) => {
+      return goalMinuteSortValue(first.minute) - goalMinuteSortValue(second.minute);
     });
+}
+
+function uniqueGoalEvents(events) {
+  const seen = new Set();
+
+  return (Array.isArray(events) ? events : []).filter((event) => {
+    const score = event.score && typeof event.score === "object"
+      ? `${event.score.home ?? ""}-${event.score.away ?? ""}`
+      : "";
+    const key = [
+      event.sequence || "",
+      event.side || "",
+      normalizeEventTeamName(event.team),
+      cleanGoalPlayer(event.player),
+      cleanGoalMinute(event.minute),
+      String(event.goalType || ""),
+      score
+    ].join("|");
+
+    if (!event.player && !event.minute) return false;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function matchScoreForSide(match, side) {
@@ -1463,6 +1607,10 @@ function normalizeGoalList(value, team) {
         parsed && parsed.team ||
         team ||
         "",
+      side: item.side || "",
+      sequence: item.sequence || item.id || "",
+      synthetic: Boolean(item.synthetic),
+      score: item.score || {},
       card: item.card || ""
     };
   }).filter((item) => {
@@ -1719,84 +1867,30 @@ function betRow(match, playerId, locked) {
   `;
 }
 
-function defaultPicksMatchIndex(matches) {
-  if (!Array.isArray(matches) || !matches.length) return 0;
-
-  const liveIndex = matches.findIndex((match) => isLiveMatch(match));
-  if (liveIndex >= 0) return liveIndex;
-
-  const now = Date.now();
-  const nextIndex = matches.findIndex((match) => {
-    const kickoff = makeDate(match).getTime();
-    return Number.isFinite(kickoff) && kickoff >= now;
-  });
-
-  return nextIndex >= 0 ? nextIndex : matches.length - 1;
-}
-
-function getPicksMatchIndex(round, matches) {
-  const stored = Number(state.picksMatchIndexByRound[round]);
-
-  if (Number.isInteger(stored)) {
-    return Math.max(0, Math.min(stored, Math.max(0, matches.length - 1)));
-  }
-
-  const initial = defaultPicksMatchIndex(matches);
-  state.picksMatchIndexByRound[round] = initial;
-  return initial;
-}
-
 function renderPicksSection() {
   const round = rounds.includes(state.picksRound) ? state.picksRound : rounds[0];
-  const matches = DATA.matches
-    .filter((match) => match.round === round)
-    .sort((a, b) => makeDate(a) - makeDate(b));
+  const matches = DATA.matches.filter((m) => m.round === round);
   const shouldHide = !DATA.settings.showPicksBeforeDeadline && !isRoundLocked(round);
-  const activeIndex = getPicksMatchIndex(round, matches);
-  const match = matches[activeIndex] || null;
 
   return `
-    <section class="card picks-browser-card">
+    <section class="card">
       <div class="title-row">
         <h2>👀 Palpites enviados</h2>
-        <span class="kicker">Por jogo</span>
+        <span class="kicker">Por fase/rodada</span>
       </div>
 
-      <div class="toolbar picks-toolbar">
+      <div class="toolbar">
         <div class="field">
           <label>Rodada/fase</label>
           <select id="picksRoundSelect">
-            ${rounds.map((item) => `<option value="${item}" ${item === round ? "selected" : ""}>${displayRound(item)}</option>`).join("")}
+            ${rounds.map((r) => `<option value="${r}" ${r === round ? "selected" : ""}>${displayRound(r)}</option>`).join("")}
           </select>
         </div>
       </div>
 
-      ${match ? `
-        <div class="picks-game-navigation" aria-label="Navegação entre jogos">
-          <button
-            type="button"
-            class="picks-nav-button"
-            id="previousPicksGame"
-            aria-label="Mostrar jogo anterior"
-            ${activeIndex <= 0 ? "disabled" : ""}
-          >←</button>
-
-          <div class="picks-game-position" aria-live="polite">
-            <strong>Jogo ${activeIndex + 1} de ${matches.length}</strong>
-            <span>${displayRound(round)}</span>
-          </div>
-
-          <button
-            type="button"
-            class="picks-nav-button"
-            id="nextPicksGame"
-            aria-label="Mostrar próximo jogo"
-            ${activeIndex >= matches.length - 1 ? "disabled" : ""}
-          >→</button>
-        </div>
-
-        <div class="picks-list picks-list-single">
-          <div class="pick-card picks-active-game" data-picks-match-index="${activeIndex}">
+      <div class="picks-list">
+        ${matches.map((match) => `
+          <div class="pick-card">
             <div class="pick-top">
               <span>${match.group} · Jogo ${match.number}</span>
               <span>${formatDate(match.date)} · ${match.time}</span>
@@ -1815,8 +1909,8 @@ function renderPicksSection() {
               }).join("")}
             </div>
           </div>
-        </div>
-      ` : '<div class="info-box">Nenhum jogo cadastrado nesta rodada.</div>'}
+        `).join("")}
+      </div>
     </section>
   `;
 }
@@ -1855,28 +1949,7 @@ function bindEvents() {
   if (picksRoundSelect) {
     picksRoundSelect.addEventListener("change", (event) => {
       state.picksRound = event.target.value;
-      delete state.picksMatchIndexByRound[state.picksRound];
       localStorage.setItem("bolao-picks-round", state.picksRound);
-      render();
-    });
-  }
-
-  const previousPicksGame = $("#previousPicksGame");
-  const nextPicksGame = $("#nextPicksGame");
-
-  if (previousPicksGame) {
-    previousPicksGame.addEventListener("click", () => {
-      const current = Number(state.picksMatchIndexByRound[state.picksRound] || 0);
-      state.picksMatchIndexByRound[state.picksRound] = Math.max(0, current - 1);
-      render();
-    });
-  }
-
-  if (nextPicksGame) {
-    nextPicksGame.addEventListener("click", () => {
-      const total = DATA.matches.filter((match) => match.round === state.picksRound).length;
-      const current = Number(state.picksMatchIndexByRound[state.picksRound] || 0);
-      state.picksMatchIndexByRound[state.picksRound] = Math.min(Math.max(0, total - 1), current + 1);
       render();
     });
   }
@@ -2338,31 +2411,20 @@ function compactCountry(name) {
 }
 
 function flagMarkup(name) {
-  if (name === "Inglaterra") {
-    return `
-      <span class="flag-native flag-svg" role="img" aria-label="Bandeira da Inglaterra">
-        <svg viewBox="0 0 60 36" aria-hidden="true" focusable="false">
-          <rect width="60" height="36" fill="#ffffff"></rect>
-          <rect x="25" width="10" height="36" fill="#ce1124"></rect>
-          <rect y="13" width="60" height="10" fill="#ce1124"></rect>
-        </svg>
-      </span>
-    `;
+  const position = FLAG_POSITIONS[name];
+
+  if (!position) {
+    return `<span class="flag-fallback" role="img" aria-label="Bandeira não disponível">•</span>`;
   }
 
-  if (name === "Escócia") {
-    return `
-      <span class="flag-native flag-svg" role="img" aria-label="Bandeira da Escócia">
-        <svg viewBox="0 0 60 36" aria-hidden="true" focusable="false">
-          <rect width="60" height="36" fill="#0065bd"></rect>
-          <path d="M-4 0 L4 0 L64 36 L56 36 Z M56 0 L64 0 L4 36 L-4 36 Z" fill="#ffffff"></path>
-        </svg>
-      </span>
-    `;
-  }
-
-  const flag = FLAGS[name] || "🏳️";
-  return `<span class="flag-native" role="img" aria-label="${escapeHtml(name)}">${flag}</span>`;
+  return `
+    <span
+      class="flag-sprite"
+      role="img"
+      aria-label="Bandeira de ${escapeHtml(name)}"
+      style="--flag-col:${position[0]};--flag-row:${position[1]}"
+    ></span>
+  `;
 }
 
 function countryCode(name) {
