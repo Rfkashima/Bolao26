@@ -1397,8 +1397,10 @@ function normalizeEventTeamName(value) {
 function liveGoals(match) {
   const eventGoals = normalizeGoalList(match.events, "")
     .filter((event) => {
-      return String(event.type || "").toLowerCase().includes("gol") ||
-        String(event.type || "").toLowerCase().includes("goal");
+      return isRealGoalEvent(event) && (
+        String(event.type || "").toLowerCase().includes("gol") ||
+        String(event.type || "").toLowerCase().includes("goal")
+      );
     })
     .map((event) => {
       const side = event.side === "away" || event.side === "home"
@@ -1418,16 +1420,20 @@ function liveGoals(match) {
   }
 
   const homeGoals = uniqueGoalsForSide(
-    normalizeGoalList(match.homeScorers, match.team1).map((goal) => {
-      return Object.assign({}, goal, { team: match.team1 });
-    }),
+    normalizeGoalList(match.homeScorers, match.team1)
+      .filter(isRealGoalEvent)
+      .map((goal) => {
+        return Object.assign({}, goal, { team: match.team1 });
+      }),
     "home"
   ).slice(0, matchScoreForSide(match, "home"));
 
   const awayGoals = uniqueGoalsForSide(
-    normalizeGoalList(match.awayScorers, match.team2).map((goal) => {
-      return Object.assign({}, goal, { team: match.team2 });
-    }),
+    normalizeGoalList(match.awayScorers, match.team2)
+      .filter(isRealGoalEvent)
+      .map((goal) => {
+        return Object.assign({}, goal, { team: match.team2 });
+      }),
     "away"
   ).slice(0, matchScoreForSide(match, "away"));
 
@@ -1438,10 +1444,45 @@ function liveGoals(match) {
     });
 }
 
+function isRealGoalEvent(event) {
+  if (!event || event.synthetic) {
+    return false;
+  }
+
+  const player = cleanGoalPlayer(event.player || event.label || "");
+  const minute = cleanGoalMinute(event.minute);
+  const assist = String(event.assist || "").trim();
+  const team = normalizeEventTeamName(event.team);
+  const normalizedPlayer = normalizeEventTeamName(player);
+
+  if (!player && !minute) {
+    return false;
+  }
+
+  /*
+   * Versões anteriores criavam linhas genéricas como "Gol da Inglaterra"
+   * quando a fonte não enviava o autor. Essas linhas não são eventos reais e
+   * não devem aparecer como se fossem dados oficiais.
+   */
+  if (
+    player &&
+    team &&
+    normalizedPlayer === team &&
+    !minute &&
+    !assist
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 function uniqueGoalEvents(events) {
   const seen = new Set();
 
   return (Array.isArray(events) ? events : []).filter((event) => {
+    if (!isRealGoalEvent(event)) return false;
+
     const score = event.score && typeof event.score === "object"
       ? `${event.score.home ?? ""}-${event.score.away ?? ""}`
       : "";
@@ -1580,12 +1621,21 @@ function normalizeGoalList(value, team) {
       rawPlayer,
       item.team || team || ""
     );
-    const explicitMinute = cleanGoalMinute(
+    let explicitMinute = cleanGoalMinute(
       item.minute ||
       item.time ||
       item.elapsed ||
       ""
     );
+    const explicitInjuryTime = cleanGoalMinute(item.injuryTime || "");
+
+    if (
+      explicitMinute &&
+      explicitInjuryTime &&
+      !String(explicitMinute).includes("+")
+    ) {
+      explicitMinute = `${explicitMinute}+${explicitInjuryTime}`;
+    }
 
     return {
       type: item.type || "Gol",
