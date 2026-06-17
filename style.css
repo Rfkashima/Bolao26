@@ -64,59 +64,17 @@ input{
   overflow: hidden;
 }
 
-.eyebrow{
-  margin: 0 0 3px;
-  color: var(--primary);
-  text-transform: uppercase;
-  letter-spacing: .12em;
-  font-size: 9px;
-  font-weight: 950;
-}
 
-h1{
-  margin: 0;
-  font-size: clamp(24px, 7vw, 48px);
-  line-height: .92;
-  letter-spacing: -0.065em;
-  font-weight: 1000;
-  color: transparent;
-  background: linear-gradient(90deg, var(--world-green), var(--world-blue) 50%, var(--world-red));
-  -webkit-background-clip: text;
-  background-clip: text;
-  text-shadow: 0 10px 26px rgba(15,23,42,.10);
-}
 
-.pill{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 5px 8px;
-  background: rgba(8,16,31,.86);
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 950;
-  white-space: nowrap;
-}
 
-.pill.success{
-  color: var(--green);
-  border-color: #a7f3d0;
-  background: rgba(236,253,245,.9);
-}
 
-.pill.warning{
-  color: var(--amber);
-  border-color: #fed7aa;
-  background: rgba(255,247,237,.9);
-}
 
-.pill.danger{
-  color: var(--red);
-  border-color: #fecaca;
-  background: rgba(254,242,242,.9);
-}
+
+
+
+
+
+
 
 
 .main-tabs{
@@ -201,9 +159,7 @@ h1{
   margin-bottom: 94px;
 }
 
-.footer{
-  padding-bottom: 98px;
-}
+
 
 
 .container{
@@ -734,15 +690,7 @@ tr:last-child td{
 }
 
 
-.footer{
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 12px 12px 24px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-}
+
 
 
 @media (max-width: 520px) {
@@ -770,14 +718,9 @@ tr:last-child td{
 
   
 
-  .eyebrow{
-    display: none;
-  }
+  
 
-  h1{
-    font-size: 24px;
-    line-height: .9;
-  }
+  
 
   .main-tabs{
     gap: 6px;
@@ -800,9 +743,7 @@ tr:last-child td{
     margin-bottom: 88px;
   }
 
-  .footer{
-    padding-bottom: 92px;
-  }
+  
 }
 
 @media (min-width: 720px) {
@@ -932,11 +873,7 @@ tr:last-child td{
 }
 
 
-.footer{
-    flex-direction: row;
-    justify-content: space-between;
-    padding-inline: clamp(18px, 4vw, 42px);
-  }
+
 }
 
 @media (min-width: 1080px) {
@@ -1038,9 +975,7 @@ tr:last-child td{
   margin-bottom: 94px !important;
 }
 
-.footer{
-  padding-bottom: 100px !important;
-}
+
 
 @media (max-width: 520px) {
   .hero{
@@ -1888,9 +1823,7 @@ tr:nth-child(even) td{
     margin-bottom: 88px !important;
   }
 
-  .footer{
-    padding-bottom: 94px !important;
-  }
+  
 
   .bet-line{
     grid-template-columns: minmax(0, 1fr) 48px 14px 48px minmax(0, 1fr);
@@ -1947,11 +1880,7 @@ tr:nth-child(even) td{
     margin-bottom: 34px !important;
   }
 
-  .footer{
-    width: min(1280px, calc(100% - 48px));
-    margin-inline: auto;
-    padding-bottom: 28px !important;
-  }
+  
 
   .home-dashboard-grid{
     grid-template-columns: minmax(340px, .82fr) minmax(500px, 1.18fr);
@@ -2013,82 +1942,31 @@ tr:nth-child(even) td{
 }
 
 /* Navegação de jogos na área de palpites */
-.picks-toolbar{
-  margin-bottom: 10px;
-}
 
-.picks-game-navigation{
-  display: grid;
-  grid-template-columns: 44px minmax(0,1fr) 44px;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
 
-.picks-nav-button{
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  border: 1px solid rgba(0,167,255,.42);
-  border-radius: 12px;
-  background: rgba(8,16,31,.92);
-  color: #ffffff;
-  font-size: 22px;
-  font-weight: 950;
-  line-height: 1;
-  cursor: pointer;
-}
 
-.picks-nav-button:hover:not(:disabled),
-.picks-nav-button:focus-visible:not(:disabled){
-  border-color: rgba(0,167,255,.88);
-  background: rgba(0,167,255,.2);
-  outline: none;
-}
 
-.picks-nav-button:disabled{
-  opacity: .34;
-  cursor: default;
-}
 
-.picks-game-position{
-  min-width: 0;
-  text-align: center;
-}
 
-.picks-game-position strong,
-.picks-game-position span{
-  display: block;
-}
 
-.picks-game-position strong{
-  color: #ffffff;
-  font-size: 13px;
-}
 
-.picks-game-position span{
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
-}
 
-.picks-list-single{
-  grid-template-columns: minmax(0,1fr) !important;
-}
+
+
+
+
+
+
+
+
+
+
 
 
 @media (max-width: 640px){
-  .picks-game-navigation{
-    grid-template-columns: 42px minmax(0,1fr) 42px;
-    gap: 8px;
-  }
+  
 
-  .picks-nav-button{
-    width: 42px;
-    min-width: 42px;
-    height: 42px;
-  }
+  
 }
 
 
@@ -2234,5 +2112,145 @@ tr:nth-child(even) td{
     grid-template-columns: 38px minmax(0,1fr) 38px;
     gap: 5px;
     font-size: 9px;
+  }
+}
+
+/* Correções finais: privacidade dos palpites e estabilidade de largura. */
+html,
+body{
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+body,
+#app,
+.container,
+.stack,
+.grid,
+.card,
+.title-row,
+.home-dashboard-grid,
+.home-dashboard-grid > *,
+.group-grid,
+.group-card,
+.game-card,
+.pick-card,
+.bet-row,
+.stat-grid,
+.stat-card,
+.player-picks,
+.player-pick,
+.live-scoreboard,
+.live-event-list,
+.live-event-row,
+.table-wrap{
+  min-width: 0;
+  max-width: 100%;
+}
+
+img,
+svg,
+video,
+canvas,
+iframe{
+  max-width: 100%;
+}
+
+.card,
+.game-card,
+.pick-card,
+.stat-card,
+.live-game-card,
+.last-match-card{
+  overflow: hidden;
+}
+
+.title-row{
+  flex-wrap: wrap;
+}
+
+.title-row > *{
+  min-width: 0;
+}
+
+.kicker,
+.game-top span,
+.pick-top span,
+.last-match-meta span,
+.compact-game-meta span,
+.live-event-person small{
+  overflow-wrap: anywhere;
+}
+
+.stat-grid{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stat-card,
+.stat-row,
+.stat-player-side{
+  width: 100%;
+}
+
+.stat-player-side{
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.stat-player-side strong{
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picks-round-toolbar{
+  grid-template-columns: minmax(0, 320px);
+}
+
+.picks-locked-notice{
+  margin-top: 10px;
+  background: rgba(255, 207, 58, .08);
+  border-color: rgba(255, 207, 58, .45);
+  color: #ffe58a;
+}
+
+@media (max-width: 720px){
+  .container{
+    width: calc(100% - 16px) !important;
+    max-width: calc(100% - 16px) !important;
+  }
+
+  .stat-grid,
+  .group-grid,
+  .home-dashboard-grid,
+  .picks-list,
+  .bet-list{
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .stat-row{
+    gap: 8px;
+  }
+
+  .stat-player-side{
+    max-width: calc(100% - 36px);
+  }
+
+  .live-event-row{
+    grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr);
+    gap: 5px;
+  }
+
+  .live-event-person strong,
+  .live-event-person small{
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .table-wrap{
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
   }
 }

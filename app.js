@@ -117,7 +117,8 @@ const FLAG_POSITIONS = {
 function init() {
   state.view = "inicio";
   localStorage.setItem("bolao-view", "inicio");
-  $("#site-title").textContent = DATA.settings.title;
+  const siteTitle = $("#site-title");
+  if (siteTitle) siteTitle.textContent = DATA.settings.title;
   bindHeaderSponsorLink();
   state.stats = DATA.stats || {};
   state.statsLoaded = Boolean(
@@ -834,6 +835,7 @@ function renderHomeMatchPicksSection() {
 
   const isLive = isLiveMatch(match);
   const isUpcoming = !isLive && isFutureScheduledMatch(match);
+  const roundClosed = isRoundLocked(match.round);
   const activeIndex = navigation.index;
   const total = navigation.matches.length;
 
@@ -874,19 +876,22 @@ function renderHomeMatchPicksSection() {
 
         ${matchLine(match)}
 
-        <div class="player-picks">
-          ${DATA.players.map((player) => {
-            const pick = state.picks[player.id]?.[match.id];
+        ${roundClosed
+          ? `<div class="player-picks">
+              ${DATA.players.map((player) => {
+                const pick = state.picks[player.id]?.[match.id];
 
-            return `
-              <div class="player-pick">
-                <span class="player-pick-name">${player.name}</span>
-                <span class="player-pick-score">${formatPick(pick)}</span>
-                <span class="player-pick-date">${formatPickLastSaved(pick)}</span>
-              </div>
-            `;
-          }).join("")}
-        </div>
+                return `
+                  <div class="player-pick">
+                    <span class="player-pick-name">${player.name}</span>
+                    <span class="player-pick-score">${formatPick(pick)}</span>
+                    <span class="player-pick-date">${formatPickLastSaved(pick)}</span>
+                  </div>
+                `;
+              }).join("")}
+            </div>`
+          : `<div class="notice picks-locked-notice">🔒 Os palpites serão exibidos após o fechamento da rodada.</div>`
+        }
       </div>
     </section>
   `;
@@ -1285,7 +1290,7 @@ function renderStatsSection() {
 
 function statCard(title, rows) {
   const cleanRows = Array.isArray(rows)
-    ? rows.filter(Boolean).slice(0, 10)
+    ? rows.filter(Boolean)
     : [];
 
   return `
@@ -1862,8 +1867,8 @@ function betRow(match, playerId, locked) {
 
 function renderPicksSection() {
   const round = rounds.includes(state.picksRound) ? state.picksRound : rounds[0];
-  const matches = DATA.matches.filter((m) => m.round === round);
-  const shouldHide = !DATA.settings.showPicksBeforeDeadline && !isRoundLocked(round);
+  const matches = DATA.matches.filter((match) => match.round === round);
+  const roundClosed = isRoundLocked(round);
 
   return `
     <section class="card">
@@ -1872,38 +1877,41 @@ function renderPicksSection() {
         <span class="kicker">Por fase/rodada</span>
       </div>
 
-      <div class="toolbar">
+      <div class="toolbar picks-round-toolbar">
         <div class="field">
           <label>Rodada/fase</label>
           <select id="picksRoundSelect">
-            ${rounds.map((r) => `<option value="${r}" ${r === round ? "selected" : ""}>${displayRound(r)}</option>`).join("")}
+            ${rounds.map((item) => `<option value="${item}" ${item === round ? "selected" : ""}>${displayRound(item)}</option>`).join("")}
           </select>
         </div>
       </div>
 
-      <div class="picks-list">
-        ${matches.map((match) => `
-          <div class="pick-card">
-            <div class="pick-top">
-              <span>${match.group} · Jogo ${match.number}</span>
-              <span>${formatDate(match.date)} · ${match.time}</span>
-            </div>
-            ${matchLine(match)}
-            <div class="player-picks">
-              ${DATA.players.map((player) => {
-                const pick = state.picks[player.id]?.[match.id];
-                return `
-                  <div class="player-pick">
-                    <span class="player-pick-name">${player.name}</span>
-                    <span class="player-pick-score">${shouldHide ? "Oculto" : formatPick(pick)}</span>
-                    <span class="player-pick-date">${formatPickLastSaved(pick)}</span>
-                  </div>
-                `;
-              }).join("")}
-            </div>
-          </div>
-        `).join("")}
-      </div>
+      ${roundClosed
+        ? `<div class="picks-list">
+            ${matches.map((match) => `
+              <div class="pick-card">
+                <div class="pick-top">
+                  <span>${match.group} · Jogo ${match.number}</span>
+                  <span>${formatDate(match.date)} · ${match.time}</span>
+                </div>
+                ${matchLine(match)}
+                <div class="player-picks">
+                  ${DATA.players.map((player) => {
+                    const pick = state.picks[player.id]?.[match.id];
+                    return `
+                      <div class="player-pick">
+                        <span class="player-pick-name">${player.name}</span>
+                        <span class="player-pick-score">${formatPick(pick)}</span>
+                        <span class="player-pick-date">${formatPickLastSaved(pick)}</span>
+                      </div>
+                    `;
+                  }).join("")}
+                </div>
+              </div>
+            `).join("")}
+          </div>`
+        : `<div class="notice picks-locked-notice">🔒 Os palpites desta rodada serão exibidos somente após o fechamento.</div>`
+      }
     </section>
   `;
 }
