@@ -1,6 +1,7 @@
 const DATA = window.BOLAO_DATA;
 const STORE_KEY = "bolao-copa-2026-picks-v1";
 const DRAFT_KEY = "bolao-copa-2026-drafts-v1";
+const BACKEND_TIMEOUT_MS = 20000;
 
 const state = {
   view: "inicio",
@@ -16,12 +17,17 @@ const state = {
   betRound: localStorage.getItem("bolao-bet-round") || "Rodada 1",
   picksRound: localStorage.getItem("bolao-picks-round") || "Rodada 1",
   gamesRound: localStorage.getItem("bolao-games-round") || "Rodada 1",
-  loadedBackend: false
+  loadedBackend: false,
+  saveInFlight: false
 };
 
 const $ = (selector) => document.querySelector(selector);
 const app = $("#app");
 let backendRefreshTimer = null;
+let backendRequestPromise = null;
+let deferredBackendRender = false;
+let lastBackendVisualSignature = "";
+let picksWriteRevision = 0;
 const rounds = [...new Set(DATA.matches.map((m) => m.round))];
 const groupStageRounds = ["Rodada 1", "Rodada 2", "Rodada 3"];
 
@@ -129,15 +135,14 @@ function init() {
   loadLocalPicks();
   loadDrafts();
   bindMainTabs();
-  loadBackendState();
   setupAutoRefresh();
   render();
+
   window.requestAnimationFrame(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    loadBackendState().catch(() => {});
   });
 }
-
-
 
 function bindHeaderSponsorLink() {
   const hero = document.querySelector(".hero");
@@ -176,7 +181,7 @@ function injectHeaderSponsor() {
   sponsor.className = "header-sponsor-row";
   sponsor.innerHTML = `
     <div class="header-sponsor">
-      <img src="logo-ia-pro-contato.png" alt="IA Pro Contato">
+      <img src="logo-ia-pro-contato.webp" alt="IA Pro Contato" width="768" height="256" decoding="async">
       <span><small>Patrocinado por</small><strong>IA Pro Contato</strong><em>Atendimento automatizado e ERP</em></span>
     </div>
   `;
@@ -238,6 +243,26 @@ function setDraftPick(playerId, round, matchId, g1, g2) {
     g2,
     updatedAt: new Date().toISOString()
   };
+
+  saveDrafts();
+}
+
+function setDraftRoundPicks(playerId, round, picks) {
+  if (!playerId || !round || !Array.isArray(picks)) return;
+  if (!state.drafts[playerId]) state.drafts[playerId] = {};
+  if (!state.drafts[playerId][round]) state.drafts[playerId][round] = {};
+
+  const updatedAt = new Date().toISOString();
+
+  picks.forEach((pick) => {
+    if (!pick || !pick.matchId) return;
+
+    state.drafts[playerId][round][pick.matchId] = {
+      g1: String(pick.g1 ?? ""),
+      g2: String(pick.g2 ?? ""),
+      updatedAt
+    };
+  });
 
   saveDrafts();
 }
@@ -322,31 +347,113 @@ function mergeMatches(list) {
 function loadBackendState(silent = false) {
   if (!DATA.settings.apiUrl) {
     setBackendStatus("Modo local", "");
-    return;
+    return Promise.resolve(null);
+  }
+
+  if (backendRequestPromise) {
+    return backendRequestPromise;
   }
 
   if (!silent) setBackendStatus("Conectando...", "warning");
 
-  jsonp(`${DATA.settings.apiUrl}?action=state`)
+  const requestPicksRevision = picksWriteRevision;
+
+  backendRequestPromise = jsonp(`${DATA.settings.apiUrl}?action=state`)
     .then((payload) => {
-      if (!payload || payload.ok === false) throw new Error(payload?.error || "Falha ao carregar.");
-      if (Array.isArray(payload.picks)) {
+      if (!payload || payload.ok === false) {
+        throw new Error(payload?.error || "Falha ao carregar.");
+      }
+
+      persistFocusedBetDraft();
+
+      const visualSignature = backendVisualSignature(payload);
+      const shouldRender = !state.loadedBackend || visualSignature !== lastBackendVisualSignature;
+
+      if (
+        Array.isArray(payload.picks) &&
+        requestPicksRevision === picksWriteRevision
+      ) {
         state.picks = {};
         mergePicks(payload.picks);
         saveLocalPicks();
       }
+
       mergeMatches(payload.matches || []);
       state.stats = payload.stats || state.stats || {};
       state.videos = payload.videos || state.videos || [];
       state.youtube = payload.youtube || state.youtube || {};
       state.dataSource = payload.dataSource || state.dataSource || {};
       state.loadedBackend = true;
+      lastBackendVisualSignature = visualSignature;
       setBackendStatus("Online", "success");
-      render();
+
+      if (shouldRender) {
+        if (isBetInputFocused()) {
+          deferredBackendRender = true;
+        } else {
+          deferredBackendRender = false;
+          render();
+        }
+      }
+
+      return payload;
     })
-    .catch(() => { if (!silent) setBackendStatus("Falha no backend", "danger"); });
+    .catch((error) => {
+      if (!silent) setBackendStatus("Falha no backend", "danger");
+      throw error;
+    })
+    .finally(() => {
+      backendRequestPromise = null;
+    });
+
+  return backendRequestPromise;
 }
 
+function backendVisualSignature(payload) {
+  const matches = (Array.isArray(payload.matches) ? payload.matches : []).map((match) => ({
+    id: match.id || match.matchId || "",
+    score1: match.score1 ?? null,
+    score2: match.score2 ?? null,
+    status: match.status || "",
+    elapsed: match.elapsed || "",
+    injuryTime: match.injuryTime || "",
+    homeScorers: match.homeScorers || [],
+    awayScorers: match.awayScorers || [],
+    events: match.events || []
+  }));
+
+  return JSON.stringify({
+    picks: Array.isArray(payload.picks) ? payload.picks : [],
+    matches,
+    stats: payload.stats || {},
+    youtube: payload.youtube || {}
+  });
+}
+
+function isBetInputFocused() {
+  return state.view === "palpites" &&
+    document.activeElement instanceof HTMLInputElement &&
+    document.activeElement.matches('input[data-match][data-side]');
+}
+
+function persistFocusedBetDraft() {
+  if (!isBetInputFocused() || !state.selectedPlayer) return;
+
+  const activeInput = document.activeElement;
+  const matchId = activeInput.dataset.match;
+  const g1 = document.querySelector(`input[data-match="${matchId}"][data-side="g1"]`)?.value ?? "";
+  const g2 = document.querySelector(`input[data-match="${matchId}"][data-side="g2"]`)?.value ?? "";
+
+  setDraftPick(state.selectedPlayer, state.betRound, matchId, g1, g2);
+}
+
+function flushDeferredBackendRender() {
+  window.setTimeout(() => {
+    if (!deferredBackendRender || isBetInputFocused()) return;
+    deferredBackendRender = false;
+    render();
+  }, 0);
+}
 
 function setupAutoRefresh() {
   if (backendRefreshTimer) {
@@ -354,14 +461,16 @@ function setupAutoRefresh() {
   }
 
   backendRefreshTimer = window.setInterval(() => {
-    loadBackendState(true);
+    loadBackendState(true).catch(() => {});
   }, 30000);
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
-      loadBackendState(true);
+      loadBackendState(true).catch(() => {});
     }
   });
+
+  window.addEventListener("pagehide", persistFocusedBetDraft);
 }
 
 function setBackendStatus(text, type) {
@@ -376,17 +485,32 @@ function jsonp(url) {
     const callbackName = `bolaoCallback_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
     const script = document.createElement("script");
     const sep = url.includes("?") ? "&" : "?";
+    let settled = false;
 
-    window[callbackName] = (payload) => {
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
       delete window[callbackName];
       script.remove();
-      resolve(payload);
     };
 
+    const finish = (handler, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      handler(value);
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      finish(reject, new Error("Tempo limite excedido ao carregar dados."));
+    }, BACKEND_TIMEOUT_MS);
+
+    window[callbackName] = (payload) => {
+      finish(resolve, payload);
+    };
+
+    script.async = true;
     script.onerror = () => {
-      delete window[callbackName];
-      script.remove();
-      reject(new Error("Erro ao carregar dados."));
+      finish(reject, new Error("Erro ao carregar dados."));
     };
 
     script.src = `${url}${sep}callback=${callbackName}`;
@@ -430,62 +554,71 @@ function render() {
 }
 
 function renderHome() {
-  const potential = DATA.players.length * DATA.settings.entryFee;
-
   app.innerHTML = `
     <div class="stack">
       ${renderLiveSection()}
+      ${renderHomeMatchPicksSection()}
       ${renderUpcomingGamesSection()}
-      ${renderLatestVideosSection()}
 
       <section class="card">
         <div class="title-row">
           <h2>🏆 Ranking dos players</h2>
-          <span class="kicker">Exatos no ranking</span>
+          <span class="kicker">Classificação atual</span>
         </div>
         ${rankingTable(calculateRanking())}
       </section>
 
-      <section class="grid two">
-        <div class="card">
-          <div class="title-row">
-            <h2>📌 Regras</h2>
-            <span class="kicker">Pontuação</span>
-          </div>
-          <ul class="list">
-            <li>🎯 Placar exato: <strong>${DATA.settings.exactScorePoints} pontos</strong>.</li>
-            <li>✅ Resultado correto: <strong>${DATA.settings.resultPoints} ponto</strong>.</li>
-            <li>⏰ Palpites fecham <strong>${DATA.settings.lockHoursBeforeRound}h antes</strong> do primeiro jogo da rodada.</li>
-            <li>🥇 Desempate: maior número de placares exatos.</li>
-          </ul>
-        </div>
-
-        <div class="card">
-          <div class="title-row">
-            <h2>💰 Premiação</h2>
-            <span class="kicker">Total: ${money(potential)}</span>
-          </div>
-          <ul class="list">
-            <li>🥇 1º lugar: <strong>R$ 100,00</strong>.</li>
-            <li>🥈 2º lugar: <strong>R$ 60,00</strong>.</li>
-            <li>🥉 3º lugar: <strong>R$ 40,00</strong>.</li>
-            <li>🎟️ 4º lugar: <strong>R$ 20,00</strong>, inscrição de volta.</li>
-          </ul>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="title-row">
-          <h2>⏳ Fechamento</h2>
-          <span class="kicker">Por rodada</span>
-        </div>
-        <div class="deadline-list">
-          ${rounds.slice(0, 4).map(roundDeadlineCard).join("")}
-        </div>
-      </section>
-
-      ${renderSponsorBlock()}
     </div>
+  `;
+}
+
+function getHomeReferenceMatch() {
+  const liveMatch = DATA.matches
+    .filter((match) => isLiveMatch(match))
+    .sort((a, b) => makeDate(a) - makeDate(b))[0];
+
+  return liveMatch || getLastFinishedMatch();
+}
+
+function renderHomeMatchPicksSection() {
+  const match = getHomeReferenceMatch();
+
+  if (!match) {
+    return "";
+  }
+
+  const isLive = isLiveMatch(match);
+
+  return `
+    <section class="card home-match-picks-section">
+      <div class="title-row">
+        <h2>🎯 Palpites dos jogadores</h2>
+        <span class="kicker">${isLive ? "Jogo ao vivo" : "Último jogo"}</span>
+      </div>
+
+      <div class="pick-card">
+        <div class="pick-top">
+          <span>${match.group} · Jogo ${match.number}</span>
+          <span>${formatDate(match.date)} · ${match.time}</span>
+        </div>
+
+        ${matchLine(match)}
+
+        <div class="player-picks">
+          ${DATA.players.map((player) => {
+            const pick = state.picks[player.id]?.[match.id];
+
+            return `
+              <div class="player-pick">
+                <span class="player-pick-name">${player.name}</span>
+                <span class="player-pick-score">${formatPick(pick)}</span>
+                <span class="player-pick-date">${formatPickLastSaved(pick)}</span>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    </section>
   `;
 }
 
@@ -746,13 +879,13 @@ function renderUpcomingGamesSection() {
   const upcoming = DATA.matches
     .filter((match) => isFutureScheduledMatch(match))
     .sort((a, b) => makeDate(a) - makeDate(b))
-    .slice(0, 2);
+    .slice(0, 5);
 
   return `
     <section class="card upcoming-card">
       <div class="title-row">
         <h2>⏭️ Próximos jogos</h2>
-        <span class="kicker">2 próximos</span>
+        <span class="kicker">5 próximos</span>
       </div>
 
       ${upcoming.length
@@ -990,7 +1123,7 @@ function renderSponsorBlock(compact = false) {
       aria-label="Abrir site da IA Pro Contato"
     >
       <div class="sponsor-wrap">
-        <div class="sponsor-logo"><img src="logo-ia-pro-contato.png" alt="IA Pro Contato"></div>
+        <div class="sponsor-logo"><img src="logo-ia-pro-contato.webp" alt="IA Pro Contato" width="768" height="256" decoding="async"></div>
         <div class="sponsor-text">
           <div class="sponsor-label">Patrocínio</div>
           <div class="sponsor-name">IA Pro Contato</div>
@@ -1772,6 +1905,7 @@ function renderBetSection() {
   const round = rounds.includes(state.betRound) ? state.betRound : rounds[0];
   const playerId = state.selectedPlayer;
   const locked = isRoundLocked(round);
+  const saving = Boolean(state.saveInFlight);
   const matches = DATA.matches.filter((m) => m.round === round);
 
   return `
@@ -1802,12 +1936,12 @@ function renderBetSection() {
           </select>
         </div>
 
-        <button class="btn" id="savePicks" ${locked ? "disabled" : ""}>Salvar</button>
+        <button class="btn" id="savePicks" ${locked || saving ? "disabled" : ""}>${saving ? "Salvando..." : "Salvar"}</button>
       </div>
 
       ${locked
         ? `<div class="notice danger">🔒 ${displayRound(round)} fechada. Prazo: ${formatDateTime(roundDeadline(round))}.</div>`
-        : `<div class="notice">⏰ ${displayRound(round)} fecha em ${formatDateTime(roundDeadline(round))}. O último salvamento sobrescreve o anterior.</div>`
+        : `<div class="notice">⏰ ${displayRound(round)} fecha em ${formatDateTime(roundDeadline(round))}. As alterações ficam protegidas neste aparelho até o salvamento ser concluído.</div>`
       }
 
       <div class="bet-list">
@@ -1818,7 +1952,9 @@ function renderBetSection() {
 }
 
 function betRow(match, playerId, locked) {
-  const pick = state.picks[playerId]?.[match.id] || {};
+  const savedPick = state.picks[playerId]?.[match.id] || null;
+  const draftPick = getDraftPick(playerId, match.round, match.id);
+  const pick = draftPick || savedPick || {};
 
   return `
     <div class="bet-row">
@@ -1829,9 +1965,33 @@ function betRow(match, playerId, locked) {
 
       <div class="bet-line">
         <span class="team">${country(match.team1)}</span>
-        <input type="number" min="0" max="99" data-match="${match.id}" data-side="g1" value="${pick.g1 ?? ""}" ${locked ? "disabled" : ""}>
+        <input
+          type="number"
+          min="0"
+          max="99"
+          step="1"
+          inputmode="numeric"
+          autocomplete="off"
+          data-match="${match.id}"
+          data-side="g1"
+          aria-label="Palpite para ${escapeHtml(match.team1)}"
+          value="${pick.g1 ?? ""}"
+          ${locked ? "disabled" : ""}
+        >
         <span class="x">X</span>
-        <input type="number" min="0" max="99" data-match="${match.id}" data-side="g2" value="${pick.g2 ?? ""}" ${locked ? "disabled" : ""}>
+        <input
+          type="number"
+          min="0"
+          max="99"
+          step="1"
+          inputmode="numeric"
+          autocomplete="off"
+          data-match="${match.id}"
+          data-side="g2"
+          aria-label="Palpite para ${escapeHtml(match.team2)}"
+          value="${pick.g2 ?? ""}"
+          ${locked ? "disabled" : ""}
+        >
         <span class="team">${country(match.team2)}</span>
       </div>
     </div>
@@ -1893,44 +2053,72 @@ function bindEvents() {
   const picksRoundSelect = $("#picksRoundSelect");
 
   if (playerSelect) {
-    playerSelect.addEventListener("change", (e) => {
-      state.selectedPlayer = e.target.value;
+    playerSelect.addEventListener("change", (event) => {
+      persistFocusedBetDraft();
+      state.selectedPlayer = event.target.value;
       localStorage.setItem("bolao-player", state.selectedPlayer);
       render();
     });
   }
 
   if (playerCodeInput) {
-    playerCodeInput.addEventListener("input", (e) => {
-      state.playerCode = e.target.value.trim();
+    playerCodeInput.addEventListener("input", (event) => {
+      state.playerCode = event.target.value.trim();
       localStorage.setItem("bolao-player-code", state.playerCode);
     });
   }
 
   if (betRoundSelect) {
-    betRoundSelect.addEventListener("change", (e) => {
-      state.betRound = e.target.value;
+    betRoundSelect.addEventListener("change", (event) => {
+      persistFocusedBetDraft();
+      state.betRound = event.target.value;
       localStorage.setItem("bolao-bet-round", state.betRound);
       render();
     });
   }
 
   if (picksRoundSelect) {
-    picksRoundSelect.addEventListener("change", (e) => {
-      state.picksRound = e.target.value;
+    picksRoundSelect.addEventListener("change", (event) => {
+      state.picksRound = event.target.value;
       localStorage.setItem("bolao-picks-round", state.picksRound);
       render();
     });
   }
 
-  document.querySelectorAll("input[data-match][data-side]").forEach((input) => {
+  const scoreInputs = [...document.querySelectorAll("input[data-match][data-side]")];
+
+  scoreInputs.forEach((input, index) => {
+    input.addEventListener("focus", () => {
+      window.requestAnimationFrame(() => input.select());
+    });
+
+    input.addEventListener("mouseup", (event) => {
+      event.preventDefault();
+      input.select();
+    });
+
     input.addEventListener("input", () => {
       const matchId = input.dataset.match;
-      const g1 = document.querySelector(`input[data-match="${matchId}"][data-side="g1"]`)?.value || "";
-      const g2 = document.querySelector(`input[data-match="${matchId}"][data-side="g2"]`)?.value || "";
+      const g1 = document.querySelector(`input[data-match="${matchId}"][data-side="g1"]`)?.value ?? "";
+      const g2 = document.querySelector(`input[data-match="${matchId}"][data-side="g2"]`)?.value ?? "";
 
       setDraftPick(state.selectedPlayer, state.betRound, matchId, g1, g2);
     });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+
+      event.preventDefault();
+      const nextInput = scoreInputs[index + 1];
+
+      if (nextInput) {
+        nextInput.focus();
+      } else {
+        $("#savePicks")?.focus();
+      }
+    });
+
+    input.addEventListener("blur", flushDeferredBackendRender);
   });
 
   const saveButton = $("#savePicks");
@@ -1939,7 +2127,19 @@ function bindEvents() {
   }
 }
 
+function setSaveButtonBusy(busy) {
+  const saveButton = $("#savePicks");
+  if (!saveButton) return;
+
+  saveButton.disabled = busy || isRoundLocked(state.betRound);
+  saveButton.textContent = busy ? "Salvando..." : "Salvar";
+}
+
 function saveRoundPicks(round) {
+  if (state.saveInFlight) {
+    return;
+  }
+
   if (!state.selectedPlayer) {
     alert("Selecione o jogador antes de salvar.");
     return;
@@ -1955,30 +2155,49 @@ function saveRoundPicks(round) {
     return;
   }
 
-  const matches = DATA.matches.filter((m) => m.round === round);
+  const matches = DATA.matches.filter((match) => match.round === round);
   const newPicks = [];
 
   for (const match of matches) {
-    const g1 = document.querySelector(`input[data-match="${match.id}"][data-side="g1"]`)?.value || "";
-    const g2 = document.querySelector(`input[data-match="${match.id}"][data-side="g2"]`)?.value || "";
+    const g1 = document.querySelector(`input[data-match="${match.id}"][data-side="g1"]`)?.value ?? "";
+    const g2 = document.querySelector(`input[data-match="${match.id}"][data-side="g2"]`)?.value ?? "";
 
     if (g1 === "" || g2 === "") {
       alert("Preencha todos os jogos da rodada antes de salvar.");
       return;
     }
 
+    const goals1 = Number(g1);
+    const goals2 = Number(g2);
+
+    if (
+      !Number.isInteger(goals1) ||
+      !Number.isInteger(goals2) ||
+      goals1 < 0 ||
+      goals2 < 0 ||
+      goals1 > 99 ||
+      goals2 > 99
+    ) {
+      alert(`Informe um placar válido para ${match.team1} x ${match.team2}.`);
+      return;
+    }
+
     newPicks.push({
       playerId: state.selectedPlayer,
       matchId: match.id,
-      g1: Number(g1),
-      g2: Number(g2),
+      g1: goals1,
+      g2: goals2,
       submittedAt: new Date().toISOString()
     });
   }
 
+  setDraftRoundPicks(state.selectedPlayer, round, newPicks);
   mergePicks(newPicks);
   saveLocalPicks();
-  clearDraftRound(state.selectedPlayer, round);
+
+  state.saveInFlight = true;
+  picksWriteRevision += 1;
+  setSaveButtonBusy(true);
 
   submitBackend({
     action: "savePicks",
@@ -1993,10 +2212,15 @@ function saveRoundPicks(round) {
 
     mergePicks(response.picks || newPicks);
     saveLocalPicks();
+    clearDraftRound(state.selectedPlayer, round);
+    lastBackendVisualSignature = "";
     alert("Palpites salvos.");
     render();
   }).catch((error) => {
-    alert(`Palpites guardados neste aparelho, mas não enviados ao Google Sheets: ${error.message || "erro no backend"}`);
+    alert(`Os palpites continuam protegidos neste aparelho, mas não foram enviados ao Google Sheets: ${error.message || "erro no backend"}`);
+  }).finally(() => {
+    state.saveInFlight = false;
+    setSaveButtonBusy(false);
   });
 }
 
@@ -2409,13 +2633,24 @@ function isFutureScheduledMatch(match) {
     match.elapsed
   ].join(' ').toLowerCase();
 
-  return text.includes('pendente') ||
+  if (
+    text.includes('pendente') ||
     text.includes('notstarted') ||
     text.includes('not_started') ||
     text.includes('not started') ||
     text.includes('scheduled') ||
     text.includes('timed') ||
-    text.includes(' ns ');
+    text.includes(' ns ')
+  ) {
+    return true;
+  }
+
+  const hasScore = match.score1 !== null &&
+    match.score1 !== undefined &&
+    match.score2 !== null &&
+    match.score2 !== undefined;
+
+  return !hasScore && makeDate(match).getTime() > Date.now();
 }
 
 function isFinishedStatus(match) {
