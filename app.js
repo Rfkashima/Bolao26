@@ -5,6 +5,7 @@ const LIVE_REFRESH_MS = 15000;
 const BASE_STATE_STALE_MS = 5 * 60 * 1000;
 const UPCOMING_FEATURE_WINDOW_MS = 30 * 60 * 1000;
 const ACTIVE_MATCH_GRACE_MS = 4 * 60 * 60 * 1000;
+const RECENT_FINISHED_DETAILS_MS = 8 * 60 * 60 * 1000;
 
 const state = {
   view: "inicio",
@@ -181,8 +182,8 @@ function scheduleInitialBackendLoad() {
       window.scrollTo({ top: 0, left: 0, behavior: "instant" });
       await loadBaseState().catch(() => null);
 
-      if (shouldUseLiveRefresh()) {
-        await loadLiveState().catch(() => null);
+      if (shouldUseLiveRefresh() || hasRecentFinishedMatch()) {
+        loadLiveState(true).catch(() => null);
       }
 
       scheduleLiveRefresh();
@@ -209,6 +210,17 @@ function hasPotentiallyActiveMatch() {
 
 function shouldUseLiveRefresh() {
   return hasLiveMatches() || hasPotentiallyActiveMatch();
+}
+
+function hasRecentFinishedMatch() {
+  const match = getLastFinishedMatch();
+
+  if (!match) {
+    return false;
+  }
+
+  const finishedAt = makeDate(match).getTime() + ACTIVE_MATCH_GRACE_MS;
+  return Number.isFinite(finishedAt) && Date.now() - finishedAt <= RECENT_FINISHED_DETAILS_MS;
 }
 
 
@@ -420,8 +432,8 @@ function loadBaseState() {
   return baseRequestPromise;
 }
 
-function loadLiveState() {
-  if (!DATA.settings.apiUrl || !shouldUseLiveRefresh()) {
+function loadLiveState(force = false) {
+  if (!DATA.settings.apiUrl || (!force && !shouldUseLiveRefresh())) {
     scheduleLiveRefresh();
     return Promise.resolve(null);
   }
