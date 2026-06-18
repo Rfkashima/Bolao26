@@ -2246,7 +2246,7 @@ function roundDeadline(round) {
     .sort((a, b) => makeDate(a) - makeDate(b))[0];
 
   const date = makeDate(first);
-  date.setHours(date.getHours() - DATA.settings.lockHoursBeforeRound);
+  date.setMinutes(date.getMinutes() - 15);
   return date;
 }
 
