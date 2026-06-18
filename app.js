@@ -6,6 +6,7 @@ const BASE_STATE_STALE_MS = 5 * 60 * 1000;
 const UPCOMING_FEATURE_WINDOW_MS = 30 * 60 * 1000;
 const ACTIVE_MATCH_GRACE_MS = 4 * 60 * 60 * 1000;
 const RECENT_FINISHED_DETAILS_MS = 8 * 60 * 60 * 1000;
+const PREDICTION_LOCK_MINUTES = 15;
 
 const state = {
   view: "inicio",
@@ -653,6 +654,7 @@ function renderHome() {
   app.innerHTML = `
     <div class="stack">
       <div id="home-live-slot">${renderLiveSection()}</div>
+      ${renderRoundDeadlinesSection()}
       <div id="home-picks-slot">${renderHomeMatchPicksSection()}</div>
       <div class="home-dashboard-grid">
         ${renderUpcomingGamesSection()}
@@ -663,6 +665,43 @@ function renderHome() {
 
   bindHomeEvents();
   scheduleHomeMatchTransition();
+}
+
+function renderRoundDeadlinesSection() {
+  return `
+    <section class="card">
+      <div class="title-row">
+        <h2>⏰ Fechamento dos palpites</h2>
+        <span class="kicker">15 minutos antes do primeiro jogo</span>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Rodada</th>
+              <th>Data e horário</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rounds.map((round) => {
+              const deadline = roundDeadline(round);
+              const locked = isRoundLocked(round);
+
+              return `
+                <tr>
+                  <td><strong>${displayRound(round)}</strong></td>
+                  <td>${formatDateTime(deadline)}</td>
+                  <td>${locked ? "Fechada" : "Aberta"}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
 }
 
 function renderHomeRankingSection() {
@@ -2245,13 +2284,18 @@ function roundDeadline(round) {
     .filter((m) => m.round === round)
     .sort((a, b) => makeDate(a) - makeDate(b))[0];
 
+  if (!first) {
+    return null;
+  }
+
   const date = makeDate(first);
-  date.setMinutes(date.getMinutes() - 15);
+  date.setMinutes(date.getMinutes() - PREDICTION_LOCK_MINUTES);
   return date;
 }
 
 function isRoundLocked(round) {
-  return new Date() >= roundDeadline(round);
+  const deadline = roundDeadline(round);
+  return Boolean(deadline && new Date() >= deadline);
 }
 
 function isLiveMatch(match) {
