@@ -11,9 +11,6 @@ const state = {
   view: "inicio",
   picks: {},
   drafts: {},
-  stats: {},
-  statsLoaded: false,
-  statsLoading: false,
   selectedPlayer: localStorage.getItem("bolao-player") || "",
   playerCode: localStorage.getItem("bolao-player-code") || "",
   betRound: localStorage.getItem("bolao-bet-round") || "Rodada 1",
@@ -30,7 +27,6 @@ let liveRefreshTimer = null;
 let homeMatchTransitionTimer = null;
 let baseRequestPromise = null;
 let liveRequestPromise = null;
-let statsRequestPromise = null;
 let deferredBackendRender = false;
 let lastBackendVisualSignature = "";
 let lastLiveVisualSignature = "";
@@ -120,13 +116,6 @@ function init() {
   const siteTitle = $("#site-title");
   if (siteTitle) siteTitle.textContent = DATA.settings.title;
   bindHeaderSponsorLink();
-  state.stats = DATA.stats || {};
-  state.statsLoaded = Boolean(
-    (state.stats.scorers || state.stats.artilharia || []).length ||
-    (state.stats.assists || state.stats.assistencias || []).length ||
-    (state.stats.yellowCards || []).length ||
-    (state.stats.redCards || []).length
-  );
   mergePicks(DATA.initialPicks || []);
   loadDrafts();
   bindMainTabs();
@@ -493,40 +482,6 @@ function refreshAfterLiveUpdate() {
   }
 }
 
-function loadStatsState() {
-  if (
-    state.statsLoaded ||
-    state.statsLoading ||
-    !DATA.settings.apiUrl
-  ) {
-    return statsRequestPromise || Promise.resolve(null);
-  }
-
-  state.statsLoading = true;
-  statsRequestPromise = jsonp(`${DATA.settings.apiUrl}?action=stats`)
-    .then((payload) => {
-      if (!payload || payload.ok === false) {
-        throw new Error(payload?.error || "Falha ao carregar estatísticas.");
-      }
-
-      state.stats = payload.stats || {};
-      state.statsLoaded = true;
-
-      if (state.view === "oficial") {
-        renderOfficial();
-      }
-
-      return payload;
-    })
-    .catch(() => null)
-    .finally(() => {
-      state.statsLoading = false;
-      statsRequestPromise = null;
-    });
-
-  return statsRequestPromise;
-}
-
 function backendVisualSignature(payload) {
   const signature = {};
 
@@ -549,7 +504,6 @@ function backendVisualSignature(payload) {
   }
 
   if (Array.isArray(payload.picks)) signature.picks = payload.picks;
-  if (payload.stats) signature.stats = payload.stats;
 
   return JSON.stringify(signature);
 }
@@ -684,7 +638,6 @@ function render() {
 
   if (state.view === "oficial") {
     renderOfficial();
-    loadStatsState();
     return;
   }
 
@@ -1143,7 +1096,6 @@ function renderOfficial() {
   app.innerHTML = `
     <div class="stack">
       ${renderGroupsSection()}
-      ${renderStatsSection()}
       ${renderSponsorBlock(true)}
     </div>
   `;
@@ -1252,70 +1204,6 @@ function groupGameCard(match) {
         <span>${formatDate(match.date)} · ${match.time}</span>
       </div>
       ${matchLine(match)}
-    </div>
-  `;
-}
-
-function renderStatsSection() {
-  const source = state.stats.source || 'ESPN';
-
-  if (!state.statsLoaded) {
-    return `
-      <section class="card">
-        <div class="title-row">
-          <h2>📊 Estatísticas</h2>
-          <span class="kicker">Carregando sob demanda</span>
-        </div>
-        <div class="muted stat-empty">Carregando estatísticas oficiais...</div>
-      </section>
-    `;
-  }
-
-  return `
-    <section class="card">
-      <div class="title-row">
-        <h2>📊 Estatísticas</h2>
-        <span class="kicker">${escapeHtml(source)}</span>
-      </div>
-
-      <div class="stat-grid">
-        ${statCard('⚽ Artilharia', state.stats.scorers || state.stats.artilharia || [])}
-        ${statCard('🅰️ Assistências', state.stats.assists || state.stats.assistencias || [])}
-        ${statCard('🟨 Cartões amarelos', state.stats.yellowCards || [])}
-        ${statCard('🟥 Cartões vermelhos', state.stats.redCards || [])}
-      </div>
-    </section>
-  `;
-}
-
-function statCard(title, rows) {
-  const cleanRows = Array.isArray(rows)
-    ? rows.filter(Boolean)
-    : [];
-
-  return `
-    <div class="stat-card">
-      <h3>${title}</h3>
-
-      ${cleanRows.length
-        ? cleanRows.map((row) => {
-            const player = escapeHtml(row.player || row.nome || "-");
-            const team = String(row.team || "");
-            const total = row.total ?? row.value ?? row.qtd ?? 0;
-
-            return `
-              <div class="stat-row">
-                <div class="stat-player-side">
-                  ${team ? flagMarkup(team) : ""}
-                  <strong>${player}</strong>
-                </div>
-
-                <strong class="stat-quantity">${total}</strong>
-              </div>
-            `;
-          }).join("")
-        : `<div class="muted stat-empty">Aguardando dados oficiais.</div>`
-      }
     </div>
   `;
 }
