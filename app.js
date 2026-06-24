@@ -9,6 +9,59 @@ const ACTIVE_MATCH_GRACE_MS = 4 * 60 * 60 * 1000;
 const LIVE_SOURCE_FRESH_MS = 10 * 60 * 1000;
 const RECENT_FINISHED_DETAILS_MS = 8 * 60 * 60 * 1000;
 
+const VERIFIED_RESULTS_THROUGH_J050 = Object.freeze({
+  "J001": [2, 0],
+  "J002": [2, 1],
+  "J003": [1, 1],
+  "J004": [4, 1],
+  "J005": [1, 1],
+  "J006": [1, 1],
+  "J007": [0, 1],
+  "J008": [2, 0],
+  "J009": [7, 1],
+  "J010": [2, 2],
+  "J011": [1, 0],
+  "J012": [5, 1],
+  "J013": [0, 0],
+  "J014": [1, 1],
+  "J015": [1, 1],
+  "J016": [2, 2],
+  "J017": [3, 1],
+  "J018": [1, 4],
+  "J019": [3, 0],
+  "J020": [3, 1],
+  "J021": [1, 1],
+  "J022": [4, 2],
+  "J023": [1, 0],
+  "J024": [1, 3],
+  "J025": [1, 1],
+  "J026": [4, 1],
+  "J027": [6, 0],
+  "J028": [1, 0],
+  "J029": [2, 0],
+  "J030": [0, 1],
+  "J031": [3, 0],
+  "J032": [0, 1],
+  "J033": [5, 1],
+  "J034": [2, 1],
+  "J035": [0, 0],
+  "J036": [0, 4],
+  "J037": [4, 0],
+  "J038": [0, 0],
+  "J039": [2, 2],
+  "J040": [1, 3],
+  "J041": [2, 0],
+  "J042": [3, 0],
+  "J043": [3, 2],
+  "J044": [1, 2],
+  "J045": [5, 0],
+  "J046": [0, 0],
+  "J047": [0, 1],
+  "J048": [1, 0],
+  "J049": [2, 1],
+  "J050": [3, 1],
+});
+
 const state = {
   view: "inicio",
   picks: {},
@@ -114,6 +167,22 @@ const FLAG_POSITIONS = {
 
 
 
+
+function applyVerifiedCompletedResults() {
+  Object.entries(VERIFIED_RESULTS_THROUGH_J050).forEach(([matchId, score]) => {
+    const match = DATA.matches.find((item) => item.id === matchId);
+
+    if (!match) return;
+
+    match.score1 = score[0];
+    match.score2 = score[1];
+    match.status = "FT";
+    match.sourceStatus = "STATUS_FULL_TIME";
+    match.elapsed = "FT";
+    match.resultVerified = true;
+  });
+}
+
 function init() {
   state.view = "inicio";
   localStorage.setItem("bolao-view", "inicio");
@@ -121,6 +190,7 @@ function init() {
   if (siteTitle) siteTitle.textContent = DATA.settings.title;
   bindHeaderSponsorLink();
   mergePicks(DATA.initialPicks || []);
+  applyVerifiedCompletedResults();
   loadDrafts();
   bindMainTabs();
   setupAutoRefresh();
@@ -441,6 +511,7 @@ function loadBaseState() {
       }
 
       mergeMatches(payload.matches || []);
+      applyVerifiedCompletedResults();
       state.loadedBackend = true;
       lastBaseLoadAt = Date.now();
       lastBackendVisualSignature = visualSignature;
@@ -488,6 +559,7 @@ function loadLiveState(force = false) {
 
       persistFocusedBetDraft();
       mergeMatches(payload.matches || []);
+      applyVerifiedCompletedResults();
       lastLiveVisualSignature = signature;
       refreshAfterLiveUpdate();
       return payload;
@@ -743,7 +815,9 @@ function renderRanking() {
           <h2>🏆 Ranking dos players</h2>
           <span class="kicker">Classificação atual</span>
         </div>
-        ${rankingTable(calculateRanking())}
+        ${state.loadedBackend
+          ? rankingTable(calculateRanking())
+          : `<div class="info-box">Carregando classificação...</div>`}
       </section>
 
       <section class="card ranking-page-card">
@@ -759,7 +833,9 @@ function renderRanking() {
           ${rankingFilterButton("knockout", "Apenas Mata-mata")}
         </div>
 
-        ${renderRankingEvolutionChart(state.rankingRange)}
+        ${state.loadedBackend
+          ? renderRankingEvolutionChart(state.rankingRange)
+          : `<div class="info-box ranking-chart-empty">Carregando histórico do ranking...</div>`}
       </section>
 
       ${renderSponsorBlock(true)}
@@ -1151,11 +1227,7 @@ function scheduleHomeMatchTransition() {
 }
 
 function getHomeReferenceMatch() {
-  const liveMatch = DATA.matches
-    .filter((match) => isLiveMatch(match))
-    .sort((a, b) => makeDate(a) - makeDate(b))[0];
-
-  return liveMatch || getFeaturedPendingMatches()[0] || getLastFinishedMatch();
+  return getLastFinishedMatch() || getChronologicalMatches()[0] || null;
 }
 
 function getChronologicalMatches() {
@@ -1479,7 +1551,10 @@ function formatLiveStatus(match) {
 function getLastFinishedMatch() {
   return DATA.matches
     .filter((match) => isFinishedStatus(match))
-    .sort((a, b) => makeDate(b) - makeDate(a))[0] || null;
+    .sort((first, second) => {
+      return makeDate(second).getTime() - makeDate(first).getTime() ||
+        Number(second.number || 0) - Number(first.number || 0);
+    })[0] || null;
 }
 
 function renderLastFinishedMatch(match) {
@@ -2899,7 +2974,10 @@ function getLastRankedMatch() {
       const score = getPredictionScore(match);
       return !isFutureScheduledMatch(match) && score.home !== null && score.away !== null;
     })
-    .sort((a, b) => makeDate(b) - makeDate(a))[0] || null;
+    .sort((first, second) => {
+      return makeDate(second).getTime() - makeDate(first).getTime() ||
+        Number(second.number || 0) - Number(first.number || 0);
+    })[0] || null;
 }
 
 function numericMatchValue(match, fields) {
