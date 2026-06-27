@@ -3662,6 +3662,14 @@ body.modal-open{
   font-size:10px;
   line-height:1;
   text-align:center;
+  appearance:textfield;
+  -moz-appearance:textfield;
+}
+
+.bracket-team-row .bracket-pick-input::-webkit-inner-spin-button,
+.bracket-team-row .bracket-pick-input::-webkit-outer-spin-button{
+  margin:0;
+  -webkit-appearance:none;
 }
 
 @media (max-width:899px){
