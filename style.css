@@ -3944,3 +3944,35 @@ body.modal-open{
     font-size:9px;
   }
 }
+
+/* PC: o campo do palpite fica imediatamente antes da equipe no chaveamento. */
+@media (min-width: 900px){
+  .bracket-team-entry-pick{
+    display:grid !important;
+    grid-template-columns:28px minmax(0, 1fr);
+    align-items:center;
+    column-gap:4px;
+    width:100%;
+    min-width:0;
+    overflow:visible !important;
+    white-space:nowrap;
+  }
+
+  .bracket-team-entry-pick > .bracket-pick-input{
+    grid-column:1;
+    grid-row:1;
+    width:28px;
+    min-width:28px;
+    margin:0;
+  }
+
+  .bracket-team-entry-pick > .bracket-team-name{
+    grid-column:2;
+    grid-row:1;
+    display:block;
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+}

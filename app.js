@@ -2537,9 +2537,11 @@ function bracketTeamPrefix(match, side, context, selectedRound) {
 }
 
 function renderBracketTeamRow(match, side, context, selectedRound) {
+  const hasPickInput = context === "picks" && selectedRound === match.round;
+
   return `
     <div class="bracket-team-row">
-      <span class="bracket-team-entry">
+      <span class="bracket-team-entry ${hasPickInput ? "bracket-team-entry-pick" : ""}">
         ${bracketTeamPrefix(match, side, context, selectedRound)}
         <span class="bracket-team-name">${bracketTeamDisplay(match, side)}</span>
       </span>
