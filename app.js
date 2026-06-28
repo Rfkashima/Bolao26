@@ -1,7 +1,7 @@
 const DATA = window.BOLAO_DATA;
 const BACKEND_ENVIRONMENT = String(DATA.settings.environment || "").trim();
 const DRAFT_KEY = "bolao-copa-2026-drafts-v1";
-const BASE_STATE_CACHE_KEY = `bolao-base-state-cache-v2-${BACKEND_ENVIRONMENT || "default"}`;
+const BASE_STATE_CACHE_KEY = `bolao-base-state-cache-v3-${BACKEND_ENVIRONMENT || "default"}`;
 const BASE_STATE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const BACKEND_TIMEOUT_MS = 25000;
 const LIVE_REFRESH_MS = 15000;
@@ -11,6 +11,8 @@ const ACTIVE_MATCH_GRACE_MS = 4 * 60 * 60 * 1000;
 const LIVE_SOURCE_FRESH_MS = 10 * 60 * 1000;
 const RECENT_FINISHED_DETAILS_MS = 8 * 60 * 60 * 1000;
 const HISTORY_REQUEST_TIMEOUT_MS = 30000;
+const SIMULATED_COMPETITION_BASE_MS = new Date(DATA.settings.simulatedNow || "").getTime();
+const SIMULATED_COMPETITION_REAL_ANCHOR_MS = Date.now();
 
 
 const state = {
@@ -61,6 +63,16 @@ const detailRequests = new Map();
 const detailRetryAfter = new Map();
 const detailsLoadedMatchIds = new Set();
 let bestThirdAssignmentCache = { signature: "", assignments: new Map() };
+
+// As quatro combinações ainda possíveis para os oito melhores terceiros,
+// conforme a matriz oficial da FIFA (Anexo C). Os valores indicam o grupo
+// do terceiro colocado destinado a cada jogo dos 16 avos.
+const FIFA_ACTIVE_THIRD_PLACE_OPTIONS = Object.freeze({
+  BDEFIJKL: Object.freeze({ 74: "D", 77: "F", 79: "E", 80: "K", 81: "B", 82: "I", 85: "J", 87: "L" }),
+  BDEFGIKL: Object.freeze({ 74: "D", 77: "F", 79: "E", 80: "K", 81: "B", 82: "I", 85: "G", 87: "L" }),
+  BDEFGIJL: Object.freeze({ 74: "D", 77: "F", 79: "E", 80: "I", 81: "B", 82: "J", 85: "G", 87: "L" }),
+  ABDEFGIL: Object.freeze({ 74: "D", 77: "F", 79: "E", 80: "I", 81: "B", 82: "A", 85: "G", 87: "L" })
+});
 
 const ROUND_LABELS = {
   "Rodada 1": "Rodada 1",
@@ -146,6 +158,7 @@ function init() {
   const siteTitle = $("#site-title");
   if (siteTitle) siteTitle.textContent = DATA.settings.title;
   bindHeaderSponsorLink();
+  sanitizeStoredMatchEvents();
   mergePicks(DATA.initialPicks || []);
   loadDrafts();
   restoreCachedBaseState();
@@ -393,7 +406,13 @@ function mergePicks(list) {
 
 function normalizeRemoteMatch(remote) {
   if (!Array.isArray(remote)) {
-    return remote || {};
+    const normalizedObject = Object.assign({}, remote || {});
+
+    if (Object.prototype.hasOwnProperty.call(normalizedObject, "events")) {
+      normalizedObject.events = goalOnlyEvents(normalizedObject.events);
+    }
+
+    return normalizedObject;
   }
 
   const normalized = {
@@ -406,7 +425,7 @@ function normalizeRemoteMatch(remote) {
   if (remote.length > 4) normalized.elapsed = remote[4];
   if (remote.length > 5) normalized.homeScorers = remote[5];
   if (remote.length > 6) normalized.awayScorers = remote[6];
-  if (remote.length > 7) normalized.events = remote[7];
+  if (remote.length > 7) normalized.events = goalOnlyEvents(remote[7]);
   if (remote.length > 8) normalized.injuryTime = remote[8];
   if (remote.length > 9) normalized.source = remote[9];
   if (remote.length > 10) normalized.sourceStatus = remote[10];
@@ -414,6 +433,93 @@ function normalizeRemoteMatch(remote) {
   if (remote.length > 12) normalized.statistics = remote[12];
 
   return normalized;
+}
+
+function sanitizeStoredMatchEvents() {
+  DATA.matches.forEach((match) => {
+    if (!Object.prototype.hasOwnProperty.call(match, "events")) return;
+    match.events = goalOnlyEvents(match.events);
+  });
+}
+
+function goalOnlyEvents(value) {
+  const deduplicated = [];
+  const indexByKey = new Map();
+
+  normalizeGoalList(value, "")
+    .filter((event) => isGoalEvent(event))
+    .map((event) => Object.assign({}, event, {
+      kind: "goal",
+      icon: "⚽"
+    }))
+    .forEach((event) => {
+      const minute = cleanGoalMinute(event.minute);
+      const player = goalEventPlayerKey(event.player || "");
+      const team = normalizeEventTeamName(event.team);
+      const side = String(event.side || "").trim().toLowerCase();
+      const fallbackLabel = goalEventPlayerKey(event.label || event.type || "goal");
+      const key = player
+        ? `${minute}|${player}`
+        : `${minute}|${side}|${team}|${fallbackLabel}`;
+      const existingIndex = indexByKey.get(key);
+
+      if (existingIndex === undefined) {
+        indexByKey.set(key, deduplicated.length);
+        deduplicated.push(event);
+        return;
+      }
+
+      if (goalEventDetailWeight(event) > goalEventDetailWeight(deduplicated[existingIndex])) {
+        deduplicated[existingIndex] = event;
+      }
+    });
+
+  return deduplicated;
+}
+
+function goalEventPlayerKey(value) {
+  return cleanGoalPlayer(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s*\((?:og|gc|own goal|gol contra|p|penalty|penalti)\)\s*$/i, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function goalEventDetailWeight(event) {
+  const goalType = String(event && event.goalType || "").toLowerCase();
+  let weight = 0;
+
+  if (goalType === "own_goal") weight += 20;
+  if (goalType === "penalty") weight += 10;
+  if (event && event.assist) weight += 4;
+  if (event && event.team) weight += 2;
+  if (event && event.side) weight += 1;
+
+  return weight;
+}
+
+function isGoalEvent(event) {
+  if (!event) return false;
+
+  const explicitKind = String(event.kind || "").trim().toLowerCase();
+  const description = [event.type, event.label]
+    .join(" ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const saysGoal = /(?:^|\s)(?:goal|gol|scoring play)(?:$|\s)/.test(description) &&
+    !/(?:disallowed|anulado|cancelado|missed|saved|defendido)/.test(description);
+
+  if (explicitKind === "goal" || saysGoal) return true;
+
+  if (["card", "substitution", "penalty", "var", "other"].includes(explicitKind)) {
+    return false;
+  }
+
+  return false;
 }
 
 function matchHasScore(match) {
@@ -460,7 +566,7 @@ function meaningfulDetailValues(value) {
 }
 
 function matchDetailsWeight(match) {
-  const events = Array.isArray(match?.events) ? match.events.length : 0;
+  const events = goalOnlyEvents(match?.events).length;
   const statistics = meaningfulDetailValues(match?.statistics);
   return events * 10000 + statistics;
 }
@@ -546,7 +652,7 @@ function mergeMatches(list, origin = "base") {
 
     const hasEventsField = Object.prototype.hasOwnProperty.call(remote, "events");
     const hasStatisticsField = Object.prototype.hasOwnProperty.call(remote, "statistics");
-    const incomingEvents = hasEventsField && Array.isArray(remote.events) ? remote.events : [];
+    const incomingEvents = hasEventsField ? goalOnlyEvents(remote.events) : [];
     const incomingStatistics = hasStatisticsField && remote.statistics && typeof remote.statistics === "object"
       ? remote.statistics
       : {};
@@ -557,10 +663,9 @@ function mergeMatches(list, origin = "base") {
     }
 
     if (hasEventsField) {
-      const currentEvents = Array.isArray(match.events) ? match.events : [];
-      if (incomingEvents.length >= currentEvents.length) {
-        match.events = incomingEvents;
-      }
+      match.events = incomingEvents;
+    } else if (Object.prototype.hasOwnProperty.call(match, "events")) {
+      match.events = goalOnlyEvents(match.events);
     }
 
     if (hasStatisticsField) {
@@ -640,7 +745,15 @@ function currentServerTimeMs() {
 }
 
 function currentCompetitionTimeMs() {
-  return state.loadedBackend ? currentServerTimeMs() : Date.now();
+  if (state.loadedBackend) {
+    return currentServerTimeMs();
+  }
+
+  if (Number.isFinite(SIMULATED_COMPETITION_BASE_MS)) {
+    return SIMULATED_COMPETITION_BASE_MS + (Date.now() - SIMULATED_COMPETITION_REAL_ANCHOR_MS);
+  }
+
+  return Date.now();
 }
 
 function loadBaseState() {
@@ -859,6 +972,16 @@ function refreshAfterLiveUpdate() {
 
   if (state.view === "oficial") {
     renderOfficial();
+    return;
+  }
+
+  if (state.view === "palpites") {
+    if (isBetInputFocused()) {
+      deferredBackendRender = true;
+      return;
+    }
+
+    renderPicksArea();
   }
 }
 
@@ -1757,7 +1880,7 @@ function renderHomeMatchPicksSection() {
 function renderHomeFinishedMatchDetails(match) {
   if (!isFinishedStatus(match)) {
     if (isPastMatchAwaitingResult(match)) {
-      return `<div class="info-box historical-result-pending">Sincronizando o placar e os eventos deste jogo finalizado...</div>`;
+      return `<div class="info-box historical-result-pending">Sincronizando o placar e os gols deste jogo finalizado...</div>`;
     }
 
     return "";
@@ -1774,10 +1897,10 @@ function renderHomeFinishedMatchDetails(match) {
   return `
     <div class="home-finished-match-details">
       ${detailsPending
-        ? `<div class="info-box historical-result-pending">Sincronizando os eventos e as estatísticas deste jogo finalizado...</div>`
+        ? `<div class="info-box historical-result-pending">Sincronizando os gols e as estatísticas deste jogo finalizado...</div>`
         : ""}
       ${events.length ? `
-        <div class="finished-events-title">Eventos</div>
+        <div class="finished-events-title">Gols</div>
         <div class="live-event-list finished-goals-aligned">
           ${events.map((event) => liveEventRow(event, match)).join("")}
         </div>
@@ -2030,7 +2153,7 @@ function renderLastFinishedMatch(match) {
         </div>
 
         ${events.length ? `
-          <div class="finished-events-title">Eventos</div>
+          <div class="finished-events-title">Gols</div>
           <div class="live-event-list finished-goals-aligned">
             ${events.map((event) => liveEventRow(event, match)).join("")}
           </div>
@@ -2138,8 +2261,9 @@ function groupPositionCandidate(label) {
   const position = Number(match[1]);
   const groupId = match[2].toUpperCase();
   const standings = calculateGroupStandings()[groupId] || [];
+  const hasCurrentTable = standings.some((row) => Number(row.j || 0) > 0);
 
-  if (isGroupStageComplete(groupId) && standings[position - 1]) {
+  if (hasCurrentTable && standings[position - 1]) {
     return [standings[position - 1].team];
   }
 
@@ -2158,15 +2282,13 @@ function groupStageResolutionSignature() {
 }
 
 function qualifiedThirdPlacedRows() {
-  if (!DATA.groups.every((group) => isGroupStageComplete(group.id))) {
-    return [];
-  }
-
   const standings = calculateGroupStandings();
 
   return DATA.groups
     .map((group) => {
-      const row = standings[group.id]?.[2];
+      const rows = standings[group.id] || [];
+      const groupStarted = rows.some((row) => Number(row.j || 0) > 0);
+      const row = groupStarted ? rows[2] : null;
       return row ? { ...row, groupId: group.id } : null;
     })
     .filter(Boolean)
@@ -2194,63 +2316,34 @@ function bestThirdSlotAssignments() {
     return assignments;
   }
 
-  const qualifiedGroups = new Set(qualifiedRows.map((row) => row.groupId));
-  const slots = [];
+  const optionKey = qualifiedRows
+    .map((row) => row.groupId)
+    .sort((first, second) => first.localeCompare(second))
+    .join("");
+  const officialOption = FIFA_ACTIVE_THIRD_PLACE_OPTIONS[optionKey];
+
+  if (!officialOption) {
+    bestThirdAssignmentCache = { signature, assignments };
+    return assignments;
+  }
+
+  const standings = calculateGroupStandings();
 
   DATA.matches
     .filter((match) => match.round === "Rodada 4")
     .forEach((match) => {
-      [match.team1, match.team2].forEach((label) => {
-        const parsed = String(label || "").match(/^3o melhor ([A-L](?:\/[A-L])+)$/i);
-        if (!parsed) return;
+      const groupId = officialOption[Number(match.number)];
+      if (!groupId) return;
 
-        slots.push({
-          label: String(label),
-          groups: parsed[1]
-            .split("/")
-            .map((groupId) => groupId.toUpperCase())
-            .filter((groupId) => qualifiedGroups.has(groupId))
-        });
-      });
-    });
-
-  const orderedSlots = slots
-    .map((slot, originalIndex) => ({ ...slot, originalIndex }))
-    .sort((first, second) =>
-      first.groups.length - second.groups.length ||
-      first.originalIndex - second.originalIndex
-    );
-  const selected = new Map();
-  const usedGroups = new Set();
-
-  const solve = (index) => {
-    if (index >= orderedSlots.length) return true;
-
-    const slot = orderedSlots[index];
-    const available = slot.groups
-      .filter((groupId) => !usedGroups.has(groupId))
-      .sort((first, second) => first.localeCompare(second));
-
-    for (const groupId of available) {
-      selected.set(slot.label, groupId);
-      usedGroups.add(groupId);
-
-      if (solve(index + 1)) return true;
-
-      selected.delete(slot.label);
-      usedGroups.delete(groupId);
-    }
-
-    return false;
-  };
-
-  if (solve(0)) {
-    const standings = calculateGroupStandings();
-    selected.forEach((groupId, label) => {
+      const label = [match.team1, match.team2].find((value) =>
+        /^3o melhor [A-L](?:\/[A-L])+$/i.test(String(value || ""))
+      );
       const team = standings[groupId]?.[2]?.team;
-      if (isKnownTeamName(team)) assignments.set(label, team);
+
+      if (label && isKnownTeamName(team)) {
+        assignments.set(String(label), team);
+      }
     });
-  }
 
   bestThirdAssignmentCache = { signature, assignments };
   return assignments;
@@ -2507,11 +2600,10 @@ function bracketPickInput(match, side, locked) {
   return `
     <input
       class="bracket-pick-input"
-      type="number"
-      min="0"
-      max="99"
-      step="1"
+      type="text"
       inputmode="numeric"
+      pattern="[0-9]*"
+      maxlength="2"
       autocomplete="off"
       data-match="${match.id}"
       data-side="${dataSide}"
@@ -2537,11 +2629,9 @@ function bracketTeamPrefix(match, side, context, selectedRound) {
 }
 
 function renderBracketTeamRow(match, side, context, selectedRound) {
-  const hasPickInput = context === "picks" && selectedRound === match.round;
-
   return `
     <div class="bracket-team-row">
-      <span class="bracket-team-entry ${hasPickInput ? "bracket-team-entry-pick" : ""}">
+      <span class="bracket-team-entry">
         ${bracketTeamPrefix(match, side, context, selectedRound)}
         <span class="bracket-team-name">${bracketTeamDisplay(match, side)}</span>
       </span>
@@ -2827,7 +2917,7 @@ function liveMatchDetails(match) {
   const eventBlock = events.length
     ? `
       <div class="live-match-events-block">
-        <div class="finished-events-title">Eventos</div>
+        <div class="finished-events-title">Gols</div>
         <div class="live-event-list">
           ${events.map((event) => liveEventRow(event, match)).join('')}
         </div>
@@ -2839,43 +2929,25 @@ function liveMatchDetails(match) {
 }
 
 function liveMatchEvents(match) {
-  const events = normalizeGoalList(match && match.events, "")
+  return goalOnlyEvents(match && match.events)
     .filter((event) => eventBelongsToMatch(event, match))
     .map((event) => {
-      const kind = String(event.kind || inferEventKind(event)).toLowerCase();
       const side = event.side === "away" || event.side === "home"
         ? event.side
         : eventTeamSide(event.team, match);
 
       return Object.assign({}, event, {
-        kind,
+        kind: "goal",
         side,
         team: event.team || (side === "away" ? match.team2 : match.team1),
-        icon: event.icon || eventIcon(kind, event.card),
+        icon: "⚽",
         label: event.label || event.type || ""
       });
     })
-    .filter((event) => ["goal", "card", "substitution", "penalty", "var"].includes(event.kind))
     .sort((first, second) => {
       return goalMinuteSortValue(first.minute) - goalMinuteSortValue(second.minute) ||
         Number(first.sequence || 0) - Number(second.sequence || 0);
     });
-
-  const seen = new Set();
-  return events.filter((event) => {
-    const key = [
-      event.kind,
-      event.side,
-      cleanGoalMinute(event.minute),
-      cleanGoalPlayer(event.player || event.playerIn || ""),
-      event.card || "",
-      event.sequence || ""
-    ].join("|");
-
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function eventBelongsToMatch(event, match) {

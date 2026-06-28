@@ -3662,14 +3662,6 @@ body.modal-open{
   font-size:10px;
   line-height:1;
   text-align:center;
-  appearance:textfield;
-  -moz-appearance:textfield;
-}
-
-.bracket-team-row .bracket-pick-input::-webkit-inner-spin-button,
-.bracket-team-row .bracket-pick-input::-webkit-outer-spin-button{
-  margin:0;
-  -webkit-appearance:none;
 }
 
 @media (max-width:899px){
@@ -3945,30 +3937,31 @@ body.modal-open{
   }
 }
 
-/* PC: o campo do palpite fica imediatamente antes da equipe no chaveamento. */
+/* Correção PC: campo de palpite imediatamente antes da bandeira e da equipe */
 @media (min-width: 900px){
-  .bracket-team-entry-pick{
-    display:grid !important;
-    grid-template-columns:28px minmax(0, 1fr);
+  .bracket-team-row > .bracket-team-entry{
+    display:flex;
+    flex-direction:row;
     align-items:center;
-    column-gap:4px;
+    justify-content:flex-start;
+    gap:4px;
     width:100%;
     min-width:0;
-    overflow:visible !important;
+    overflow:visible;
+    text-overflow:clip;
     white-space:nowrap;
   }
 
-  .bracket-team-entry-pick > .bracket-pick-input{
-    grid-column:1;
-    grid-row:1;
+  .bracket-team-row .bracket-pick-input{
+    order:0;
+    flex:0 0 28px;
     width:28px;
     min-width:28px;
     margin:0;
   }
 
-  .bracket-team-entry-pick > .bracket-team-name{
-    grid-column:2;
-    grid-row:1;
+  .bracket-team-row .bracket-team-name{
+    order:1;
     display:block;
     min-width:0;
     overflow:hidden;
