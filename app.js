@@ -1,7 +1,13 @@
 const DATA = window.BOLAO_DATA;
+const EXACT_SCORE_POINTS = Number.isFinite(Number(DATA.settings.exactScorePoints))
+  ? Number(DATA.settings.exactScorePoints)
+  : 3;
+const RESULT_POINTS = Number.isFinite(Number(DATA.settings.resultPoints))
+  ? Number(DATA.settings.resultPoints)
+  : 1;
 const BACKEND_ENVIRONMENT = String(DATA.settings.environment || "").trim();
 const DRAFT_KEY = "bolao-copa-2026-drafts-v1";
-const BASE_STATE_CACHE_KEY = `bolao-base-state-cache-v3-${BACKEND_ENVIRONMENT || "default"}`;
+const BASE_STATE_CACHE_KEY = `bolao-base-state-cache-v9-${BACKEND_ENVIRONMENT || "default"}`;
 const BASE_STATE_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const BACKEND_TIMEOUT_MS = 25000;
 const LIVE_REFRESH_MS = 15000;
@@ -257,8 +263,12 @@ function hasPotentiallyActiveMatch() {
   });
 }
 
+function hasDelayedMatches() {
+  return DATA.matches.some((match) => isDelayedScheduledMatch(match));
+}
+
 function shouldUseLiveRefresh() {
-  return hasLiveMatches() || hasPotentiallyActiveMatch();
+  return hasLiveMatches() || hasPotentiallyActiveMatch() || hasDelayedMatches();
 }
 
 function hasRecentFinishedMatch() {
@@ -301,11 +311,8 @@ function restoreCachedBaseState() {
       return;
     }
 
-    if (Array.isArray(payload.picks)) {
-      state.picks = {};
-      mergePicks(payload.picks);
-    }
-
+    // Palpites não são restaurados do cache local. O ranking só é exibido
+    // depois que os dados atuais forem confirmados pelo backend.
     mergeMatches(payload.matches || [], "base");
     if (payload.homeMatch) {
       mergeMatches([payload.homeMatch], "details");
@@ -319,7 +326,7 @@ function restoreCachedBaseState() {
       state.serverTimeOffsetMs = cachedServerTime - cachedAt;
     }
 
-    state.loadedBackend = true;
+    // Mantém o backend como não carregado para impedir ranking baseado em cache antigo.
   } catch (_) {
     localStorage.removeItem(BASE_STATE_CACHE_KEY);
   }
@@ -327,9 +334,12 @@ function restoreCachedBaseState() {
 
 function cacheBaseState(payload) {
   try {
+    const cachePayload = Object.assign({}, payload);
+    delete cachePayload.picks;
+
     localStorage.setItem(BASE_STATE_CACHE_KEY, JSON.stringify({
       cachedAt: Date.now(),
-      payload
+      payload: cachePayload
     }));
   } catch (_) {
     // O cache local é apenas uma aceleração e não pode impedir o carregamento normal.
@@ -592,21 +602,31 @@ function mergeMatches(list, origin = "base") {
       elapsed: match.elapsed,
       sourceStatus: match.sourceStatus,
       sourceUpdatedAt: match.sourceUpdatedAt,
+      sourceDate: match.sourceDate,
+      sourceTime: match.sourceTime,
+      sourceDateIso: match.sourceDateIso,
+      sourceState: match.sourceState,
       finalizedAt: match.finalizedAt,
       detailsSyncedAt: match.detailsSyncedAt,
       events: match.events,
       statistics: match.statistics
     });
     const sourceStatus = String(remote.sourceStatus || "").toLowerCase();
+    const sourceState = String(remote.sourceState || "").toLowerCase();
     const status = String(remote.status || "").toLowerCase();
     const elapsed = String(remote.elapsed || "").toLowerCase();
-    const notStarted = status.includes("pendente") ||
+    const notStarted = sourceState === "pre" ||
+      status.includes("pendente") ||
       status.includes("scheduled") ||
       status.includes("timed") ||
+      status.includes("atrasado") ||
+      status.includes("adiado") ||
       sourceStatus.includes("not_started") ||
       sourceStatus.includes("not started") ||
       sourceStatus.includes("scheduled") ||
       sourceStatus.includes("timed") ||
+      sourceStatus.includes("delayed") ||
+      sourceStatus.includes("postponed") ||
       elapsed === "notstarted" ||
       elapsed === "not_started" ||
       elapsed === "scheduled" ||
@@ -616,9 +636,15 @@ function mergeMatches(list, origin = "base") {
     const currentPriority = Number(match._mergePriority || 0);
     const currentTimestamp = remoteTimestamp(match);
     const incomingTimestamp = remoteTimestamp(remote);
-    const protectsCurrent = (currentFinished && !incomingFinished) ||
+    const authoritativeReset = origin === "base" &&
+      currentPriority <= priority &&
+      !incomingFinished &&
+      !matchHasScore(remote);
+    const protectsCurrent = !authoritativeReset && (
+      (currentFinished && !incomingFinished) ||
       (currentFinished && incomingFinished && currentPriority > priority && currentTimestamp > 0 && currentTimestamp >= incomingTimestamp) ||
-      (!currentFinished && !incomingFinished && currentPriority > priority && currentTimestamp >= incomingTimestamp);
+      (!currentFinished && !incomingFinished && currentPriority > priority && currentTimestamp >= incomingTimestamp)
+    );
 
     if (!protectsCurrent) {
       if (remote.score1 !== undefined) {
@@ -638,6 +664,10 @@ function mergeMatches(list, origin = "base") {
       if (remote.source !== undefined) match.source = remote.source;
       if (remote.sourceStatus !== undefined) match.sourceStatus = remote.sourceStatus;
       if (remote.sourceUpdatedAt !== undefined) match.sourceUpdatedAt = remote.sourceUpdatedAt;
+      if (remote.sourceDate !== undefined && remote.sourceDate !== "") match.sourceDate = remote.sourceDate;
+      if (remote.sourceTime !== undefined && remote.sourceTime !== "") match.sourceTime = remote.sourceTime;
+      if (remote.sourceDateIso !== undefined && remote.sourceDateIso !== "") match.sourceDateIso = remote.sourceDateIso;
+      if (remote.sourceState !== undefined && remote.sourceState !== "") match.sourceState = remote.sourceState;
       match._mergePriority = Math.max(currentPriority, priority);
     }
 
@@ -702,6 +732,10 @@ function mergeMatches(list, origin = "base") {
       elapsed: match.elapsed,
       sourceStatus: match.sourceStatus,
       sourceUpdatedAt: match.sourceUpdatedAt,
+      sourceDate: match.sourceDate,
+      sourceTime: match.sourceTime,
+      sourceDateIso: match.sourceDateIso,
+      sourceState: match.sourceState,
       finalizedAt: match.finalizedAt,
       detailsSyncedAt: match.detailsSyncedAt,
       events: match.events,
@@ -1005,6 +1039,10 @@ function backendVisualSignature(payload) {
         events: match.events || [],
         statistics: match.statistics || {},
         sourceUpdatedAt: match.sourceUpdatedAt || "",
+        sourceDate: match.sourceDate || "",
+        sourceTime: match.sourceTime || "",
+        sourceDateIso: match.sourceDateIso || "",
+        sourceState: match.sourceState || "",
         finalizedAt: match.finalizedAt || "",
         detailsSyncedAt: match.detailsSyncedAt || "",
         espnId: match.espnId || "",
@@ -1679,10 +1717,8 @@ function showClosingRoundAlertIfNeeded() {
 }
 
 function getNextScheduledMatch() {
-  const now = currentCompetitionTimeMs();
-
   return DATA.matches
-    .filter((match) => !isLiveMatch(match) && !isFinishedStatus(match) && makeDate(match).getTime() > now)
+    .filter((match) => isFutureScheduledMatch(match))
     .sort((a, b) => makeDate(a) - makeDate(b))[0] || null;
 }
 
@@ -1693,9 +1729,10 @@ function getFeaturedPendingMatches() {
       if (!match || isLiveMatch(match) || isFinishedStatus(match)) return false;
 
       const kickoff = makeDate(match).getTime();
-      return Number.isFinite(kickoff) &&
-        kickoff >= now &&
-        kickoff <= now + UPCOMING_FEATURE_WINDOW_MS;
+      return Number.isFinite(kickoff) && (
+        (kickoff >= now && kickoff <= now + UPCOMING_FEATURE_WINDOW_MS) ||
+        isDelayedScheduledMatch(match)
+      );
     })
     .sort((first, second) => {
       return makeDate(first).getTime() - makeDate(second).getTime() ||
@@ -1812,7 +1849,18 @@ function renderHomeMatchPicksSection() {
   }
 
   const isLive = isLiveMatch(match);
-  const isUpcoming = !isLive && isFutureScheduledMatch(match);
+  const isFinished = isFinishedStatus(match);
+  const isDelayed = isDelayedScheduledMatch(match);
+  const isUpcoming = !isLive && !isFinished && isFutureScheduledMatch(match);
+  const statusLabel = isLive
+    ? "Jogo ao vivo"
+    : isFinished
+      ? "Jogo finalizado"
+      : isDelayed
+        ? "Jogo atrasado"
+        : isUpcoming
+          ? "Próximo jogo"
+          : "Aguardando atualização";
   const roundClosed = isRoundLocked(match.round);
   const activeIndex = navigation.index;
   const total = navigation.matches.length;
@@ -1821,7 +1869,7 @@ function renderHomeMatchPicksSection() {
     <section class="card home-match-picks-section">
       <div class="title-row home-picks-title-row">
         <h2>🎯 Palpites</h2>
-        <span class="kicker">${isLive ? "Jogo ao vivo" : isUpcoming ? "Próximo jogo" : "Jogo finalizado"}</span>
+        <span class="kicker">${statusLabel}</span>
       </div>
 
       <div class="home-picks-navigation" aria-label="Navegação entre os jogos">
@@ -1849,7 +1897,7 @@ function renderHomeMatchPicksSection() {
       <div class="pick-card">
         <div class="pick-top">
           <span>${match.group} · Jogo ${match.number}</span>
-          <span>${formatDate(match.date)} · ${match.time}</span>
+          <span>${formatMatchDate(match)} · ${formatMatchTime(match)}</span>
         </div>
 
         ${matchLine(match)}
@@ -1879,8 +1927,12 @@ function renderHomeMatchPicksSection() {
 
 function renderHomeFinishedMatchDetails(match) {
   if (!isFinishedStatus(match)) {
+    if (isDelayedScheduledMatch(match)) {
+      return `<div class="info-box historical-result-pending">Partida atrasada. Aguardando o novo horário informado pela ESPN.</div>`;
+    }
+
     if (isPastMatchAwaitingResult(match)) {
-      return `<div class="info-box historical-result-pending">Sincronizando o placar e os gols deste jogo finalizado...</div>`;
+      return `<div class="info-box historical-result-pending">Aguardando atualização da ESPN sobre o início ou encerramento deste jogo.</div>`;
     }
 
     return "";
@@ -1990,22 +2042,26 @@ function renderLiveSection() {
 
 function renderLiveMatchPanel(match, totalMatches) {
   const live = isLiveMatch(match);
+  const delayed = isDelayedScheduledMatch(match);
   const interrupted = isInterruptedMatch(match);
   const kickoff = makeDate(match).getTime();
-  const kicker = live
-    ? interrupted
-      ? "Jogo interrompido"
-      : totalMatches > 1
-        ? `Jogo ${match.number} em andamento`
-        : "Atualização ESPN"
-    : kickoff <= currentCompetitionTimeMs()
-      ? "Aguardando atualização ESPN"
-      : "Começa em até 30 minutos";
+  const kicker = delayed
+    ? "Aguardando novo horário"
+    : live
+      ? interrupted
+        ? "Jogo interrompido"
+        : totalMatches > 1
+          ? `Jogo ${match.number} em andamento`
+          : "Atualização ESPN"
+      : kickoff <= currentCompetitionTimeMs()
+        ? "Aguardando atualização ESPN"
+        : "Começa em até 30 minutos";
+  const title = delayed ? "⏳ Jogo atrasado" : "🔴 Ao vivo";
 
   return `
     <section class="card live-section live-match-panel ${live ? "" : "upcoming-featured-section"}" data-match-id="${escapeHtml(match.id)}">
       <div class="title-row">
-        <h2>🔴 Ao vivo</h2>
+        <h2>${title}</h2>
         <span class="kicker">${escapeHtml(kicker)}</span>
       </div>
 
@@ -2021,7 +2077,7 @@ function liveGameCard(match, includePicks) {
     <div class="live-game-card ${live ? "" : "upcoming-featured-card"}" data-match-id="${escapeHtml(match.id)}">
       <div class="game-top">
         <span>${displayRound(match.round)} · Jogo ${match.number}</span>
-        <span>${formatDate(match.date)} · ${match.time}</span>
+        <span>${formatMatchDate(match)} · ${formatMatchTime(match)}</span>
       </div>
 
       ${live ? liveMatchLine(match) : matchLine(match)}
@@ -2130,46 +2186,6 @@ function getLastFinishedMatch() {
     .sort((first, second) => compareFinishedMatches(second, first))[0] || null;
 }
 
-function renderLastFinishedMatch(match) {
-  const events = liveMatchEvents(match);
-
-  return `
-    <section class="card last-match-section">
-      <div class="title-row">
-        <h2>✅ Último jogo</h2>
-        <span class="finished-pill">Jogo encerrado</span>
-      </div>
-
-      <div class="last-match-card">
-        <div class="last-match-meta">
-          <span>${displayRound(match.round)} · Jogo ${match.number}</span>
-          <span>${formatDate(match.date)} · ${match.time}</span>
-        </div>
-
-        <div class="last-match-line">
-          <div class="last-team">${country(match.team1)}</div>
-          <strong class="last-score">${matchResultInline(match)}</strong>
-          <div class="last-team last-team-right">${country(match.team2)}</div>
-        </div>
-
-        ${events.length ? `
-          <div class="finished-events-title">Gols</div>
-          <div class="live-event-list finished-goals-aligned">
-            ${events.map((event) => liveEventRow(event, match)).join("")}
-          </div>
-        ` : ""}
-
-        ${liveMatchStatistics(match)}
-
-        <div class="last-match-footer">
-          <span>${escapeHtml(match.venue || "")}</span>
-          <span>${escapeHtml(match.source || 'ESPN')}</span>
-        </div>
-      </div>
-    </section>
-  `;
-}
-
 function getUpcomingGamesLimit() {
   const currentRound = getCurrentRoundName();
 
@@ -2237,18 +2253,6 @@ function isKnownTeamName(name) {
 
 function uniqueTeamNames(names) {
   return [...new Set((names || []).filter((name) => isKnownTeamName(name)))];
-}
-
-function isGroupStageComplete(groupId) {
-  const groupName = `Grupo ${groupId}`;
-  const groupMatches = DATA.matches.filter((match) => {
-    return match.group === groupName && groupStageRounds.includes(match.round);
-  });
-
-  return groupMatches.length > 0 && groupMatches.every((match) => {
-    const score = getPredictionScore(match);
-    return isFinishedStatus(match) || (score.home !== null && score.away !== null && makeDate(match).getTime() < currentCompetitionTimeMs());
-  });
 }
 
 function groupPositionCandidate(label) {
@@ -2473,6 +2477,10 @@ function compactPossibleTeams(label) {
 }
 
 function compactGameCard(match) {
+  const delayedLabel = isDelayedScheduledMatch(match)
+    ? `<span class="compact-game-delay">Atrasado</span>`
+    : "";
+
   return `
     <div class="compact-game" data-match-id="${escapeHtml(match.id)}">
       <div class="compact-game-main">
@@ -2481,7 +2489,7 @@ function compactGameCard(match) {
         <span>${compactPossibleTeams(match.team2)}</span>
       </div>
       <div class="compact-game-meta">
-        <span>${formatDate(match.date)} · ${match.time}</span>
+        <span>${formatMatchDate(match)} · ${formatMatchTime(match)} ${delayedLabel}</span>
         <span>${compactVenue(match.venue)}</span>
       </div>
     </div>
@@ -2653,7 +2661,7 @@ function renderBracketMatch(matchNumber, context, selectedRound) {
     <div class="bracket-match ${selected ? "selected-phase" : ""} ${isFinishedStatus(match) ? "finished" : ""}" ${interaction}>
       <div class="bracket-match-meta">
         <span>J${String(match.number).padStart(3, "0")}</span>
-        <span>${formatBracketDate(match.date)} · ${match.time}</span>
+        <span>${formatBracketDate(matchDisplayDate(match))} · ${formatMatchTime(match)}</span>
       </div>
       ${renderBracketTeamRow(match, "home", context, selectedRound)}
       ${renderBracketTeamRow(match, "away", context, selectedRound)}
@@ -2905,7 +2913,7 @@ function groupGameCard(match) {
     <div class="game-card">
       <div class="game-top">
         <span>${displayRound(match.round)} · Jogo ${match.number}</span>
-        <span>${formatDate(match.date)} · ${match.time}</span>
+        <span>${formatMatchDate(match)} · ${formatMatchTime(match)}</span>
       </div>
       ${matchLine(match)}
     </div>
@@ -3434,7 +3442,7 @@ function betRow(match, playerId, locked) {
     <div class="bet-row">
       <div class="bet-meta">
         <span>${match.group} · Jogo ${match.number}</span>
-        <span>${formatDate(match.date)} · ${match.time}</span>
+        <span>${formatMatchDate(match)} · ${formatMatchTime(match)}</span>
       </div>
 
       <div class="bet-line">
@@ -3500,7 +3508,7 @@ function renderPicksSection() {
               <div class="pick-card">
                 <div class="pick-top">
                   <span>${match.group} · Jogo ${match.number}</span>
-                  <span>${formatDate(match.date)} · ${match.time}</span>
+                  <span>${formatMatchDate(match)} · ${formatMatchTime(match)}</span>
                 </div>
                 ${matchLine(match)}
                 <div class="player-picks">
@@ -3701,6 +3709,77 @@ function setSaveButtonBusy(busy) {
   saveButton.textContent = busy ? "Salvando..." : "Salvar";
 }
 
+function normalizedPickResponseItem(pick) {
+  if (!pick) return null;
+
+  const compact = Array.isArray(pick);
+  const playerId = compact ? pick[0] : (pick.playerId || pick.p);
+  const matchId = compact ? pick[1] : (pick.matchId || pick.m);
+  const rawG1 = compact ? pick[2] : (pick.g1 ?? pick.goals1 ?? pick.a);
+  const rawG2 = compact ? pick[3] : (pick.g2 ?? pick.goals2 ?? pick.b);
+  const g1 = Number(rawG1);
+  const g2 = Number(rawG2);
+
+  if (!playerId || !matchId || !Number.isInteger(g1) || !Number.isInteger(g2)) {
+    return null;
+  }
+
+  return {
+    playerId: String(playerId),
+    matchId: String(matchId),
+    g1,
+    g2,
+    submittedAt: compact ? pick[4] : (pick.submittedAt || pick.createdAt || ""),
+    updatedAt: compact ? pick[5] : (pick.updatedAt || "")
+  };
+}
+
+function validateSavedRoundResponse(response, playerId, round, expectedPicks) {
+  const confirmed = Array.isArray(response?.picks)
+    ? response.picks.map(normalizedPickResponseItem).filter(Boolean)
+    : [];
+  const expectedByMatch = new Map(expectedPicks.map((pick) => [pick.matchId, pick]));
+  const confirmedByMatch = new Map();
+
+  confirmed.forEach((pick) => {
+    if (pick.playerId !== playerId || !expectedByMatch.has(pick.matchId)) return;
+
+    if (confirmedByMatch.has(pick.matchId)) {
+      throw new Error(`O Google Sheets retornou o jogo ${pick.matchId} duplicado.`);
+    }
+
+    confirmedByMatch.set(pick.matchId, pick);
+  });
+
+  const missing = [];
+  const divergent = [];
+
+  expectedPicks.forEach((expected) => {
+    const saved = confirmedByMatch.get(expected.matchId);
+
+    if (!saved) {
+      missing.push(expected.matchId);
+      return;
+    }
+
+    if (saved.g1 !== expected.g1 || saved.g2 !== expected.g2) {
+      divergent.push(`${expected.matchId} (${saved.g1}x${saved.g2})`);
+    }
+  });
+
+  if (missing.length || divergent.length || confirmedByMatch.size !== expectedPicks.length) {
+    const details = [];
+    if (missing.length) details.push(`não confirmados: ${missing.join(", ")}`);
+    if (divergent.length) details.push(`placares divergentes: ${divergent.join(", ")}`);
+
+    throw new Error(
+      `O Google Sheets não confirmou os ${expectedPicks.length} jogos de ${displayRound(round)}${details.length ? ` (${details.join("; ")})` : ""}.`
+    );
+  }
+
+  return expectedPicks.map((expected) => confirmedByMatch.get(expected.matchId));
+}
+
 function saveRoundPicks(round) {
   if (state.saveInFlight) {
     return;
@@ -3722,14 +3801,51 @@ function saveRoundPicks(round) {
   }
 
   const matches = DATA.matches.filter((match) => match.round === round);
+  const expectedCount = Number({
+    "Rodada 1": 24,
+    "Rodada 2": 24,
+    "Rodada 3": 24,
+    "Rodada 4": 16,
+    "Rodada 5": 8,
+    "Rodada 6": 4,
+    "Rodada 7": 2,
+    "Rodada 8": 2
+  }[round] || 0);
+
+  if (!expectedCount || matches.length !== expectedCount) {
+    alert(`A configuração de ${displayRound(round)} está incompleta: encontrados ${matches.length} de ${expectedCount || "?"} jogos.`);
+    return;
+  }
+
+  const inputMap = new Map();
+  const duplicateInputs = [];
+
+  document.querySelectorAll('input[data-match][data-side]').forEach((input) => {
+    const matchId = String(input.dataset.match || "");
+    const side = String(input.dataset.side || "");
+
+    if (!matches.some((match) => match.id === matchId) || !["g1", "g2"].includes(side)) {
+      return;
+    }
+
+    const key = `${matchId}|${side}`;
+    if (inputMap.has(key)) duplicateInputs.push(key);
+    inputMap.set(key, input);
+  });
+
+  if (duplicateInputs.length) {
+    alert(`Foram encontrados campos duplicados nos jogos: ${duplicateInputs.join(", ")}. Atualize a página antes de salvar.`);
+    return;
+  }
+
   const newPicks = [];
 
   for (const match of matches) {
-    const g1 = document.querySelector(`input[data-match="${match.id}"][data-side="g1"]`)?.value ?? "";
-    const g2 = document.querySelector(`input[data-match="${match.id}"][data-side="g2"]`)?.value ?? "";
+    const g1 = inputMap.get(`${match.id}|g1`)?.value ?? "";
+    const g2 = inputMap.get(`${match.id}|g2`)?.value ?? "";
 
     if (g1 === "" || g2 === "") {
-      alert("Preencha todos os jogos da rodada antes de salvar.");
+      alert(`Preencha o jogo ${match.id} antes de salvar.`);
       return;
     }
 
@@ -3757,6 +3873,11 @@ function saveRoundPicks(round) {
     });
   }
 
+  if (newPicks.length !== expectedCount) {
+    alert(`O envio foi bloqueado porque contém ${newPicks.length} de ${expectedCount} jogos.`);
+    return;
+  }
+
   setDraftRoundPicks(state.selectedPlayer, round, newPicks);
   mergePicks(newPicks);
 
@@ -3776,13 +3897,21 @@ function saveRoundPicks(round) {
     }
 
     validateBackendEnvironment(response);
-    mergePicks(response.picks || newPicks);
+    const confirmedPicks = validateSavedRoundResponse(
+      response,
+      state.selectedPlayer,
+      round,
+      newPicks
+    );
+
+    mergePicks(confirmedPicks);
     clearDraftRound(state.selectedPlayer, round);
+    localStorage.removeItem(BASE_STATE_CACHE_KEY);
     lastBackendVisualSignature = "";
-    alert("Palpites salvos.");
+    alert(`Palpites salvos e conferidos: ${confirmedPicks.length} jogos.`);
     render();
   }).catch((error) => {
-    alert(`Os palpites continuam protegidos neste aparelho, mas não foram enviados ao Google Sheets: ${error.message || "erro no backend"}`);
+    alert(`Os palpites continuam protegidos neste aparelho, mas o salvamento não foi confirmado: ${error.message || "erro no backend"}`);
   }).finally(() => {
     state.saveInFlight = false;
     setSaveButtonBusy(false);
@@ -3807,13 +3936,13 @@ function playerPickResultBadge(pick, match) {
   if (scored.exact) {
     return live
       ? `<span class="player-pick-hit-badge exact">Placar exato parcial</span>`
-      : `<span class="player-pick-hit-badge exact">Placar exato · +${DATA.settings.exactScorePoints}</span>`;
+      : `<span class="player-pick-hit-badge exact">Placar exato · +${scored.points}</span>`;
   }
 
   if (scored.result) {
     return live
       ? `<span class="player-pick-hit-badge result">Resultado parcial</span>`
-      : `<span class="player-pick-hit-badge result">Resultado · +${DATA.settings.resultPoints}</span>`;
+      : `<span class="player-pick-hit-badge result">Resultado · +${scored.points}</span>`;
   }
 
   return "";
@@ -3883,13 +4012,18 @@ function rankingMovement(movement) {
 
 function calculateRanking() {
   const currentRanking = buildRanking();
-  const latestMatch = getLastRankedMatch();
+  const liveMatchIds = DATA.matches
+    .filter((match) => isLiveMatch(match) && hasPredictionScore(match))
+    .map((match) => match.id);
+  const comparisonMatchIds = liveMatchIds.length
+    ? liveMatchIds
+    : [getLastRankedMatch()?.id].filter(Boolean);
 
-  if (!latestMatch) {
+  if (!comparisonMatchIds.length) {
     return currentRanking.map((row) => Object.assign({}, row, { movement: 0 }));
   }
 
-  const previousRanking = buildRanking(latestMatch.id);
+  const previousRanking = buildRanking(comparisonMatchIds);
   const previousPositions = new Map(
     previousRanking.map((row, index) => [row.id, index + 1])
   );
@@ -3904,18 +4038,20 @@ function calculateRanking() {
   });
 }
 
-function buildRanking(excludedMatchId = "") {
+function buildRanking(excludedMatchIds = []) {
+  const excludedIds = new Set(
+    Array.isArray(excludedMatchIds)
+      ? excludedMatchIds.map(String)
+      : [String(excludedMatchIds || "")].filter(Boolean)
+  );
+
   return DATA.players.map((player) => {
     let points = 0;
     let exacts = 0;
     let results = 0;
 
     DATA.matches.forEach((match) => {
-      if (!isFinishedStatus(match) || !matchHasScore(match)) {
-        return;
-      }
-
-      if (excludedMatchId && match.id === excludedMatchId) {
+      if (!isRankingScorableMatch(match) || excludedIds.has(String(match.id))) {
         return;
       }
 
@@ -3941,10 +4077,7 @@ function buildRanking(excludedMatchId = "") {
 
 function getLastRankedMatch() {
   return DATA.matches
-    .filter((match) => {
-      const score = getPredictionScore(match);
-      return isFinishedStatus(match) && score.home !== null && score.away !== null;
-    })
+    .filter((match) => isFinishedStatus(match) && hasPredictionScore(match))
     .sort((first, second) => compareFinishedMatches(second, first))[0] || null;
 }
 
@@ -3963,49 +4096,128 @@ function numericMatchValue(match, fields) {
   return null;
 }
 
-function getPredictionScore(match) {
-  const knockout = match && !groupStageRounds.includes(match.round);
-  const homeFields = knockout
-    ? [
-        "scoreAfterExtraTime1",
-        "scoreBeforePenalties1",
-        "regulationPlusExtraTime1",
-        "betScore1",
-        "score1"
-      ]
-    : ["score1"];
-  const awayFields = knockout
-    ? [
-        "scoreAfterExtraTime2",
-        "scoreBeforePenalties2",
-        "regulationPlusExtraTime2",
-        "betScore2",
-        "score2"
-      ]
-    : ["score2"];
+function matchStatusText(match) {
+  return [
+    match?.status,
+    match?.sourceStatus,
+    match?.elapsed
+  ]
+    .join(" ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  return {
-    home: numericMatchValue(match, homeFields),
-    away: numericMatchValue(match, awayFields)
-  };
+function matchEndedOnPenalties(match) {
+  const text = matchStatusText(match);
+  const homePenalties = numericMatchValue(match, [
+    "penaltyScore1",
+    "penalties1",
+    "shootoutScore1"
+  ]);
+  const awayPenalties = numericMatchValue(match, [
+    "penaltyScore2",
+    "penalties2",
+    "shootoutScore2"
+  ]);
+
+  return text.includes("penalt") ||
+    text.includes("shootout") ||
+    (homePenalties !== null && awayPenalties !== null);
+}
+
+function matchEndedAfterExtraTime(match) {
+  const text = matchStatusText(match);
+  return matchEndedOnPenalties(match) ||
+    /(?:^|\s)aet(?:$|\s)/.test(text) ||
+    text.includes("after extra time") ||
+    text.includes("extra time") ||
+    text.includes("prorrogacao");
+}
+
+function numericScorePair(match, fieldPairs) {
+  for (const fields of fieldPairs) {
+    const home = numericMatchValue(match, [fields[0]]);
+    const away = numericMatchValue(match, [fields[1]]);
+
+    if (home !== null && away !== null) {
+      return { home, away };
+    }
+  }
+
+  return { home: null, away: null };
+}
+
+function getPredictionScore(match) {
+  const regulationScore = numericScorePair(match, [
+    ["score1", "score2"]
+  ]);
+
+  if (!match || groupStageRounds.includes(match.round)) {
+    return regulationScore;
+  }
+
+  if (matchEndedOnPenalties(match)) {
+    return numericScorePair(match, [
+      ["scoreBeforePenalties1", "scoreBeforePenalties2"],
+      ["regulationPlusExtraTime1", "regulationPlusExtraTime2"],
+      ["scoreAfterExtraTime1", "scoreAfterExtraTime2"],
+      ["betScore1", "betScore2"],
+      ["score1", "score2"]
+    ]);
+  }
+
+  if (matchEndedAfterExtraTime(match)) {
+    return numericScorePair(match, [
+      ["regulationPlusExtraTime1", "regulationPlusExtraTime2"],
+      ["scoreAfterExtraTime1", "scoreAfterExtraTime2"],
+      ["betScore1", "betScore2"],
+      ["score1", "score2"]
+    ]);
+  }
+
+  return regulationScore;
+}
+
+function hasPredictionScore(match) {
+  const score = getPredictionScore(match);
+  return score.home !== null && score.away !== null;
+}
+
+function isRankingScorableMatch(match) {
+  return Boolean(match) &&
+    !isDelayedScheduledMatch(match) &&
+    (isFinishedStatus(match) || isLiveMatch(match)) &&
+    hasPredictionScore(match);
 }
 
 function scorePick(pick, match) {
   const score = getPredictionScore(match);
 
   if (!pick ||
+    isDelayedScheduledMatch(match) ||
     isFutureScheduledMatch(match) ||
     score.home === null ||
     score.away === null) {
     return { points: 0, exact: false, result: false };
   }
 
-  if (pick.g1 === score.home && pick.g2 === score.away) {
-    return { points: 3, exact: true, result: true };
+  const pickHome = Number(pick.g1);
+  const pickAway = Number(pick.g2);
+
+  if (!Number.isFinite(pickHome) || !Number.isFinite(pickAway)) {
+    return { points: 0, exact: false, result: false };
   }
 
-  if (outcome(pick.g1, pick.g2) === outcome(score.home, score.away)) {
-    return { points: 1, exact: false, result: true };
+  if (pickHome === score.home && pickAway === score.away) {
+    return { points: EXACT_SCORE_POINTS, exact: true, result: true };
+  }
+
+  if (outcome(pickHome, pickAway) === outcome(score.home, score.away)) {
+    return { points: RESULT_POINTS, exact: false, result: true };
   }
 
   return { points: 0, exact: false, result: false };
@@ -4111,7 +4323,7 @@ function isRoundLocked(round) {
 }
 
 function isLiveMatch(match) {
-  if (!match || isFinishedStatus(match)) {
+  if (!match || isFinishedStatus(match) || isDelayedScheduledMatch(match)) {
     return false;
   }
 
@@ -4173,6 +4385,27 @@ function hasExplicitLiveState(match) {
   ].includes(elapsed);
 }
 
+function isDelayedScheduledMatch(match) {
+  if (!match || isFinishedStatus(match)) {
+    return false;
+  }
+
+  const sourceState = String(match.sourceState || "").trim().toLowerCase();
+  const text = [
+    match.status,
+    match.sourceStatus,
+    match.elapsed
+  ].join(" ").toLowerCase();
+
+  const delayed = text.includes("delayed") ||
+    text.includes("weather") ||
+    text.includes("adiado") ||
+    text.includes("atrasado") ||
+    text.includes("postponed");
+
+  return delayed && sourceState !== "in";
+}
+
 function hasFreshLiveSource(match) {
   const updatedAt = new Date(match && match.sourceUpdatedAt || '').getTime();
 
@@ -4191,11 +4424,39 @@ function isInterruptedMatch(match) {
   return text.includes('interrompido') ||
     text.includes('suspended') ||
     text.includes('delayed') ||
-    text.includes('weather');
+    text.includes('weather') ||
+    text.includes('postponed') ||
+    text.includes('adiado') ||
+    text.includes('atrasado');
+}
+
+function matchDisplayDate(match) {
+  const sourceDate = String(match && match.sourceDate || "").trim();
+  const sourceTime = String(match && match.sourceTime || "").trim();
+
+  return sourceDate && sourceTime
+    ? sourceDate
+    : String(match && match.date || "");
+}
+
+function formatMatchDate(match) {
+  return formatDate(matchDisplayDate(match));
+}
+
+function formatMatchTime(match) {
+  const sourceDate = String(match && match.sourceDate || "").trim();
+  const sourceTime = String(match && match.sourceTime || "").trim();
+
+  return sourceDate && sourceTime
+    ? sourceTime
+    : String(match && match.time || "");
 }
 
 function makeDate(match) {
-  return new Date(`${match.date}T${match.time}:00`);
+  const date = matchDisplayDate(match);
+  const time = formatMatchTime(match);
+
+  return new Date(`${date}T${time}:00`);
 }
 
 function country(name) {
@@ -4322,21 +4583,31 @@ function isFutureScheduledMatch(match) {
     return false;
   }
 
-  const kickoff = makeDate(match).getTime();
-  if (!Number.isFinite(kickoff) || kickoff <= currentCompetitionTimeMs()) {
-    return false;
-  }
-
   const hasScore = match.score1 !== null &&
     match.score1 !== undefined &&
     match.score2 !== null &&
     match.score2 !== undefined;
 
-  return !hasScore;
+  if (hasScore) {
+    return false;
+  }
+
+  if (isDelayedScheduledMatch(match)) {
+    return true;
+  }
+
+  const kickoff = makeDate(match).getTime();
+  return Number.isFinite(kickoff) && kickoff > currentCompetitionTimeMs();
 }
 
 function isPastMatchAwaitingResult(match) {
-  if (!match || isLiveMatch(match) || isFinishedStatus(match) || matchHasScore(match)) {
+  if (
+    !match ||
+    isLiveMatch(match) ||
+    isFinishedStatus(match) ||
+    isDelayedScheduledMatch(match) ||
+    matchHasScore(match)
+  ) {
     return false;
   }
 
